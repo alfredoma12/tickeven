@@ -1,0 +1,5 @@
+[functions.create-order]
+verify_jwt = false
+
+[functions.validate-ticket]
+verify_jwt = true

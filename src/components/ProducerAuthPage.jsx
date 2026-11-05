@@ -61,7 +61,20 @@ export default function ProducerAuthPage({ accountType = "producer", onNavigate 
       }
     } catch (loginError) {
       console.error("No se pudo completar el acceso con Supabase.", loginError);
-      setError(loginError.message || "No se pudo completar el acceso. Revisa tus datos e inténtalo otra vez.");
+      const message = loginError.message?.toLowerCase() || "";
+      if (message.includes("email rate limit exceeded") || message.includes("too many requests")) {
+        setError("Supabase alcanzó el límite de correos de registro/confirmación. No vuelvas a intentarlo repetidamente; espera a que se restablezca el límite o configura SMTP personalizado en Supabase.");
+      } else if (mode === "signup" && message.includes("email signups are disabled")) {
+        setError("El registro por correo está desactivado en Supabase. Pídele al administrador que habilite Email signups en Authentication → Sign In / Providers → Email.");
+      } else if (mode === "login" && message.includes("invalid login credentials")) {
+        setError("Correo o contraseña incorrectos. Si aún no tienes cuenta, solicita acceso desde el enlace inferior; si ya te registraste, verifica el correo y la contraseña usados.");
+      } else if (mode === "login" && message.includes("email not confirmed")) {
+        setError("Confirma tu correo desde el mensaje enviado por Supabase antes de iniciar sesión.");
+      } else if (mode === "signup" && message.includes("already registered")) {
+        setError("No se pudo crear la cuenta con ese correo. En Supabase → Authentication → Users, revisa si el usuario aún existe. Si existe, inicia sesión o restablece su contraseña; no basta con borrar su perfil.");
+      } else {
+        setError(loginError.message || "No se pudo completar el acceso. Revisa tus datos e inténtalo otra vez.");
+      }
     } finally {
       setSubmitting(false);
     }

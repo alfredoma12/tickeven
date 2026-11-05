@@ -64,3 +64,49 @@ export async function createPendingOrder({ checkoutKey, lines }) {
 
   return data;
 }
+
+export async function createMercadoPagoPreference({ orderId, checkoutKey }) {
+  const { data, error } = await requireSupabase().functions.invoke("create-payment-preference", {
+    body: { order_id: orderId, checkout_key: checkoutKey },
+  });
+  if (error) {
+    let responseError;
+    try {
+      responseError = await error.context?.json();
+    } catch {
+      responseError = null;
+    }
+    const messages = {
+      payment_not_configured: "Mercado Pago todavía no está configurado en el servidor.",
+      order_not_found: "No encontramos la orden de compra.",
+      order_not_payable: "La orden venció o ya no está pendiente. Vuelve al carrito para iniciar otra compra.",
+      payment_provider_unavailable: "Mercado Pago no está disponible en este momento.",
+      payment_preference_failed: "Mercado Pago no pudo preparar el pago. Inténtalo nuevamente.",
+    };
+    throw new Error(messages[responseError?.error] || error.message || "No se pudo iniciar el pago.");
+  }
+  if (typeof data?.checkout_url !== "string") {
+    throw new Error("Mercado Pago no devolvió un enlace de pago válido.");
+  }
+  return data;
+}
+
+export async function getPaidOrderTickets({ orderId, checkoutKey }) {
+  const { data, error } = await requireSupabase().functions.invoke("get-order-tickets", {
+    body: { order_id: orderId, checkout_key: checkoutKey },
+  });
+  if (error) {
+    let responseError;
+    try {
+      responseError = await error.context?.json();
+    } catch {
+      responseError = null;
+    }
+    const messages = {
+      order_not_found: "No encontramos esa orden. Vuelve al sitio y contacta a soporte si ya realizaste el pago.",
+      ticket_credentials_unavailable: "El pago está confirmado, pero no pudimos preparar tus entradas. Contacta a soporte.",
+    };
+    throw new Error(messages[responseError?.error] || error.message || "No se pudo consultar el estado del pago.");
+  }
+  return data;
+}

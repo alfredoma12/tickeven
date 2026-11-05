@@ -21,6 +21,9 @@ npx supabase db push
 npx supabase secrets set APP_ORIGIN=https://TU_USUARIO.github.io/TU_REPOSITORIO
 npx supabase functions deploy create-order
 npx supabase functions deploy validate-ticket
+npx supabase functions deploy create-payment-preference
+npx supabase functions deploy mercadopago-webhook
+npx supabase functions deploy get-order-tickets
 ```
 
 `APP_ORIGIN` debe coincidir exactamente con el origen del sitio publicado. La migración crea perfiles al registrar usuarios, catálogo, órdenes, reservas temporales, entradas y las políticas RLS.
@@ -62,6 +65,38 @@ npx supabase functions deploy validate-ticket
 
   No uses una clave fija como `1234` ni guardes credenciales administrativas en el frontend. La autenticación se verifica con Supabase Auth y los permisos con el rol del perfil.
 - La migración `20261105020000_account_approval_and_staff.sql` incorpora las aprobaciones, asignaciones y autorización de validación; ya está aplicada en el proyecto de producción enlazado. Para futuras migraciones, revísalas con `npx supabase db push --remote --dry-run` y solicita confirmación antes de aplicarlas.
+- La migración `20261105030000_fix_chilean_rut_validation.sql` corrige la validación del RUT en el alta de usuarios para evitar que el trigger de perfil rechace RUT válidos.
+- **Mercado Pago Checkout Pro** es el método de pago integrado. El comprador paga en Mercado Pago y vuelve a TickEven; solo el webhook firmado del servidor confirma el pago y emite entradas. El navegador nunca recibe el Access Token ni puede marcar órdenes como pagadas.
+- Para crear la aplicación, entra al [panel de desarrolladores de Mercado Pago](https://www.mercadopago.cl/developers/panel), inicia sesión, crea una aplicación para **pagos online** y selecciona **Checkout Pro**. Configura la URL del webhook:
+
+  ```text
+  https://redjwyymgnjsxbnruboh.supabase.co/functions/v1/mercadopago-webhook
+  ```
+
+  Activa las notificaciones de **Pagos** y guarda el **Access Token de prueba** y el **secreto de firma del webhook** en un lugar seguro. No los incluyas en archivos `VITE_*`, en el frontend ni en GitHub.
+- Antes de activar la integración, crea la clave de cifrado de credenciales para los QR y códigos de seguridad:
+
+  ```powershell
+  node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+  ```
+
+  Configura los secretos de las Edge Functions (usa tus credenciales de prueba primero):
+
+  ```powershell
+  npx supabase secrets set MERCADOPAGO_ACCESS_TOKEN=TEST-... MERCADOPAGO_WEBHOOK_SECRET=... TICKET_CREDENTIALS_ENCRYPTION_KEY=... APP_PUBLIC_URL=https://alfredoma12.github.io/tickeven
+  ```
+
+  `APP_PUBLIC_URL` debe ser la URL base exacta del sitio, incluyendo `/tickeven` para GitHub Pages. `APP_ORIGIN` continúa siendo solo el origen `https://alfredoma12.github.io`. Opcionalmente, configura `MERCADOPAGO_COLLECTOR_ID` con el ID de vendedor que debe recibir los pagos.
+- Una vez aplicada la migración de pagos, despliega las funciones:
+
+  ```powershell
+  npx supabase functions deploy create-payment-preference
+  npx supabase functions deploy mercadopago-webhook
+  npx supabase functions deploy get-order-tickets
+  ```
+
+  Prueba primero con credenciales TEST y usuarios/tarjetas de prueba proporcionados por Mercado Pago. Cambia a credenciales de producción solo después de comprobar el pago aprobado, el rechazo, el retorno a TickEven, la recepción del webhook y la descarga de los PDF. Nunca uses tarjetas reales para pruebas.
+- Las credenciales de entradas se cifran en Supabase y solo se entregan al navegador que conserva la clave aleatoria de esa compra cuando el pago ya aparece como `paid`. Actualmente el PDF se descarga al volver al checkout; el envío por correo requiere configurar un proveedor de correo por separado.
 - El carrito vive solo en memoria durante la navegación; no persiste en el navegador. Al crear la orden, el backend guarda comprador y líneas y recalcula precios e inventario.
-- Aún no se ha seleccionado una pasarela. No hay cobro, confirmación de pago ni emisión automática: `issue_paid_order_tickets` solo debe invocarse desde una función servidor después de verificar una confirmación auténtica del proveedor.
-- `src/data/ticketPdf.js` prepara el PDF a partir de credenciales de una entrada ya emitida. No se genera para órdenes pendientes.
+- La migración `20261105040000_mercadopago_checkout.sql` agrega campos de preferencia, almacén cifrado de credenciales y una función transaccional para completar pagos aprobados; ya está aplicada en producción. Las Edge Functions de Mercado Pago todavía deben configurarse con secretos y desplegarse.
+- `src/data/ticketPdf.js` genera el PDF solo después de recuperar credenciales de tickets emitidos por un webhook de pago aprobado.

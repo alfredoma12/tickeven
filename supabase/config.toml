@@ -3,3 +3,12 @@ verify_jwt = false
 
 [functions.validate-ticket]
 verify_jwt = true
+
+[functions.create-payment-preference]
+verify_jwt = false
+
+[functions.mercadopago-webhook]
+verify_jwt = false
+
+[functions.get-order-tickets]
+verify_jwt = false

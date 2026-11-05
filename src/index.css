@@ -1136,6 +1136,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .checkout-success h1 { margin: 10px 0; font-size: 28px; letter-spacing: -1px; }
 .checkout-success > p:not(.purchase-kicker) { color: #777a72; font-size: 10px; line-height: 1.8; }
 .checkout-success > p strong { color: #30332d; }
+.checkout-return__retry, .checkout-return__download { width: min(100%, 380px); margin: 11px auto 0; }
+.checkout-return__retry { border: 1px solid #e3e5dc; color: #44474d; background: #fff; }
+.checkout-return__retry:hover:not(:disabled) { background: #f3f3f6; }
 
 @media (max-width: 760px) {
   .purchase-page { padding: 20px 0 45px; }

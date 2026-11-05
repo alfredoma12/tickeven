@@ -31,8 +31,8 @@ begin
   if normalized !~ '^[0-9]{7,8}[0-9K]$' then return false; end if;
   body := left(normalized, length(normalized) - 1);
   provided_digit := right(normalized, 1);
-  for digit_index in reverse 1..length(body) loop
-    checksum := checksum + substring(body from digit_index for 1)::integer * multiplier;
+  for digit_index in 1..length(body) loop
+    checksum := checksum + substring(body from length(body) - digit_index + 1 for 1)::integer * multiplier;
     multiplier := case when multiplier = 7 then 2 else multiplier + 1 end;
   end loop;
   result := 11 - (checksum % 11);

@@ -1,27 +1,113 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
   CreditCard,
   LockKeyhole,
+  RefreshCw,
   ShieldCheck,
 } from "lucide-react";
 import { PurchaseSummary } from "./CartPage.jsx";
 import { ADMINISTRATION_PERCENTAGE } from "../data/pricing.js";
-import { createPendingOrder } from "../data/supabase.js";
+import { createMercadoPagoPreference, createPendingOrder, getPaidOrderTickets } from "../data/supabase.js";
 
 const money = new Intl.NumberFormat("es-CL");
 
 export default function CheckoutPage({ lines, totals }) {
-  const [order, setOrder] = useState(null);
   const [checkoutError, setCheckoutError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutKey] = useState(() => crypto.randomUUID());
+  const [paymentTickets, setPaymentTickets] = useState([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  const [pdfError, setPdfError] = useState("");
+  const [downloadingEvent, setDownloadingEvent] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("");
+  const search = new URLSearchParams(window.location.search);
+  const returnOrderId = search.get("order_id");
+  const paymentReturn = Boolean(returnOrderId && search.get("payment"));
+
+  const checkPayment = useCallback(async () => {
+    if (!returnOrderId) return;
+    setPaymentLoading(true);
+    setPaymentError("");
+    try {
+      const returnCheckoutKey = window.sessionStorage.getItem(`tickeven:checkout:${returnOrderId}`);
+      if (!returnCheckoutKey) {
+        throw new Error("No encontramos la sesión segura de esta compra. Si realizaste el pago, contacta a soporte con el folio de la orden.");
+      }
+      const result = await getPaidOrderTickets({ orderId: returnOrderId, checkoutKey: returnCheckoutKey });
+      setPaymentStatus(result.status);
+      setPaymentTickets(result.tickets ?? []);
+    } catch (error) {
+      console.error("No se pudo consultar el resultado del pago.", error);
+      setPaymentError(error.message || "No se pudo consultar el estado del pago.");
+    } finally {
+      setPaymentLoading(false);
+    }
+  }, [returnOrderId]);
 
   useEffect(() => {
     document.title = "Checkout — TickEven.cl";
   }, []);
+
+  useEffect(() => {
+    if (paymentReturn) void checkPayment();
+  }, [paymentReturn, checkPayment]);
+
+  if (paymentReturn) {
+    const ticketsByEvent = paymentTickets.reduce((groups, ticket) => {
+      const eventKey = `${ticket.eventId}:${ticket.eventTitle}`;
+      (groups[eventKey] ??= { title: ticket.eventTitle, tickets: [] }).tickets.push(ticket);
+      return groups;
+    }, {});
+    return (
+      <main className="purchase-page">
+        <div className="purchase-container">
+          <section className="checkout-success">
+            <span>{paymentStatus === "paid" ? <Check size={26} /> : <CreditCard size={26} />}</span>
+            <p className="purchase-kicker">{paymentStatus === "paid" ? "PAGO CONFIRMADO" : "VERIFICANDO PAGO"}</p>
+            <h1>{paymentStatus === "paid" ? <>Tus entradas están listas<span>.</span></> : <>Estamos confirmando tu pago<span>.</span></>}</h1>
+            <p>{paymentStatus === "paid"
+              ? "Mercado Pago confirmó la compra. Descarga el PDF de tus entradas y presenta el QR en el acceso."
+              : search.get("payment") === "failure"
+                ? "Mercado Pago no confirmó el pago. No se emitieron entradas. Puedes comprobar nuevamente el estado por si el aviso llegó antes que la notificación."
+              : "La confirmación puede tardar unos segundos. Las entradas solo aparecen después de verificar el pago con Mercado Pago."}</p>
+            {paymentError && <p className="checkout-error" role="alert">{paymentError}</p>}
+            {pdfError && <p className="checkout-error" role="alert">{pdfError}</p>}
+            {paymentStatus !== "paid" && <button className="checkout-submit checkout-return__retry" type="button" onClick={() => void checkPayment()} disabled={paymentLoading}>
+              <RefreshCw size={15} /> {paymentLoading ? "Consultando…" : "Volver a consultar pago"}
+            </button>}
+            {paymentStatus === "paid" && Object.entries(ticketsByEvent).map(([eventKey, group]) => (
+              <button
+                className="checkout-submit checkout-return__download"
+                key={eventKey}
+                type="button"
+                disabled={Boolean(downloadingEvent)}
+                onClick={async () => {
+                  setPdfError("");
+                  setDownloadingEvent(eventKey);
+                  try {
+                    const { downloadTicketPdf } = await import("../data/ticketPdf.js");
+                    await downloadTicketPdf({ eventTitle: group.title, tickets: group.tickets });
+                  } catch (error) {
+                    console.error("No se pudo generar el PDF de las entradas.", error);
+                    setPdfError(error.message || "No se pudo generar el PDF. Inténtalo otra vez.");
+                  } finally {
+                    setDownloadingEvent("");
+                  }
+                }}
+              >
+                <ArrowRight size={15} /> {downloadingEvent === eventKey ? "Preparando PDF…" : `Descargar entradas · ${group.title}`}
+              </button>
+            ))}
+            <a href="/">Volver a eventos <ArrowRight size={15} /></a>
+          </section>
+        </div>
+      </main>
+    );
+  }
 
   if (!lines.length) {
     return (
@@ -38,23 +124,6 @@ export default function CheckoutPage({ lines, totals }) {
     );
   }
 
-  if (order) {
-    return (
-      <main className="purchase-page">
-        <div className="purchase-container">
-          <section className="checkout-success">
-            <span><Check size={26} /></span>
-            <p className="purchase-kicker">ORDEN REGISTRADA · PAGO PENDIENTE</p>
-            <h1>Guardamos tu orden<span>.</span></h1>
-            <p>Orden <strong>{order.id}</strong> por <strong>${money.format(order.total_clp)}</strong>. Todavía no se realizó ningún cobro ni se emitieron entradas.</p>
-            <p>Al integrar una pasarela, el pago confirmado permitirá emitir tus códigos QR y entradas PDF.</p>
-            <a href="/">Volver a eventos <ArrowRight size={15} /></a>
-          </section>
-        </div>
-      </main>
-    );
-  }
-
   return (
     <main className="purchase-page">
       <div className="purchase-container">
@@ -64,7 +133,7 @@ export default function CheckoutPage({ lines, totals }) {
         <div className="purchase-heading">
           <span className="purchase-kicker">PASO FINAL · CHECKOUT</span>
           <h1>Completa tu compra<span>.</span></h1>
-          <p>Tus datos ya están registrados. Revisa el resumen antes de crear la orden.</p>
+          <p>Tus datos ya están registrados. Revisa el resumen antes de pagar.</p>
         </div>
         <div className="checkout-layout">
           <form
@@ -75,7 +144,9 @@ export default function CheckoutPage({ lines, totals }) {
               setIsSubmitting(true);
               try {
                 const createdOrder = await createPendingOrder({ checkoutKey, lines });
-                setOrder(createdOrder);
+                window.sessionStorage.setItem(`tickeven:checkout:${createdOrder.id}`, checkoutKey);
+                const preference = await createMercadoPagoPreference({ orderId: createdOrder.id, checkoutKey });
+                window.location.assign(preference.checkout_url);
               } catch (error) {
                 setCheckoutError(error instanceof Error ? error.message : "No se pudo guardar la orden.");
               } finally {
@@ -84,13 +155,13 @@ export default function CheckoutPage({ lines, totals }) {
             }}
           >
             <section className="checkout-form__section">
-              <div className="checkout-form__section-title"><span>1</span><div><h2>Orden de compra</h2><p>Registra la orden de forma segura para continuar cuando se integre el pago.</p></div></div>
-              <div className="checkout-payment-placeholder"><LockKeyhole size={15} /><span>La pasarela aún no está configurada. Este paso no realiza cobros ni emite entradas.</span></div>
+              <div className="checkout-form__section-title"><span>1</span><div><h2>Pago seguro</h2><p>Completarás el pago en el sitio seguro de Mercado Pago.</p></div></div>
+              <div className="checkout-payment-placeholder"><LockKeyhole size={15} /><span>TickEven no recibe ni almacena los datos de tu tarjeta. Las entradas se emiten después de confirmar el pago.</span></div>
             </section>
             <label className="checkout-terms"><input type="checkbox" required /> <span>Acepto los términos y autorizo el uso de mis datos para gestionar esta orden y sus entradas.</span></label>
             {checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}
             <button className="checkout-submit" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Guardando orden…" : "Crear orden pendiente"} <ArrowRight size={16} />
+              {isSubmitting ? "Conectando con Mercado Pago…" : "Pagar con Mercado Pago"} <ArrowRight size={16} />
             </button>
             <p className="checkout-secure-note"><ShieldCheck size={14} /> No compartimos datos de pago en este paso.</p>
           </form>

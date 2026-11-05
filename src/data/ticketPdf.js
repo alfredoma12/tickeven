@@ -34,5 +34,11 @@ export async function downloadTicketPdf({ eventTitle, tickets }) {
     pdf.text(`Folio: ${ticket.id}`, 18, 105);
   }
 
-  pdf.save("tickeven-entradas.pdf");
+  const safeEventName = eventTitle
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  pdf.save(`tickeven-entradas-${safeEventName || "evento"}.pdf`);
 }

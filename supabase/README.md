@@ -25,9 +25,31 @@ npx supabase functions deploy validate-ticket
 
 `APP_ORIGIN` debe coincidir exactamente con el origen del sitio publicado. La migración crea perfiles al registrar usuarios, catálogo, órdenes, reservas temporales, entradas y las políticas RLS.
 
-## Estado actual
+## Probar la aplicación publicada
 
-- El checkout crea órdenes pendientes y el servidor recalcula precio, administración (10%) e inventario. El catálogo debe existir en Supabase antes de vender; hoy los eventos de ejemplo y los publicados por el portal siguen almacenados localmente y no se sincronizan automáticamente.
-- No se ha seleccionado una pasarela. No hay cobro, confirmación de pago ni emisión automática: `issue_paid_order_tickets` solo debe invocarse desde una función servidor después de verificar una confirmación auténtica del proveedor.
-- La función de validación exige una sesión de productor Supabase y solo permite validar entradas de sus propios eventos. El login/dashboard actual del frontend continúa siendo una demostración local.
-- `src/data/ticketPdf.js` prepara el PDF a partir de las credenciales de una entrada ya emitida. La entrega del PDF debe conectarse al flujo de confirmación de pago; no se genera para órdenes pendientes.
+1. Aplica la migración del catálogo y bucket:
+
+   ```powershell
+   npx supabase db push --remote
+   ```
+
+2. Despliega las funciones y configura el origen exacto del sitio publicado. Para el dominio estándar del repositorio GitHub Pages, usa el origen (sin `/tickeven/`):
+
+   ```powershell
+   npx supabase secrets set APP_ORIGIN=https://alfredoma12.github.io
+   npx supabase functions deploy create-order
+   npx supabase functions deploy validate-ticket
+   ```
+
+   Si Pages usa un dominio personalizado, reemplaza `APP_ORIGIN` por ese origen.
+
+3. En GitHub, configura `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` como secrets del repositorio. El workflow `.github/workflows/deploy-pages.yml` los pasa a `npm run build` y publica `dist`. En Settings → Pages, selecciona **GitHub Actions** como fuente. El build configura la base `/tickeven/`, adecuada para la URL estándar del repositorio; si usas un dominio personalizado, cambia `VITE_BASE_PATH` del workflow a `/`.
+4. En Supabase Auth → URL Configuration, agrega la URL del sitio GitHub Pages a las redirect URLs. La confirmación de correo puede requerirse al registrar productores.
+
+## Alcance del flujo conectado
+
+- Los eventos destacados se leen desde Supabase. La migración del catálogo agrega eventos de ejemplo y tipos de entrada para poder probar la página inicialmente.
+- El login/registro de productores usa Supabase Auth. Las fichas y fotos se guardan en la base de datos y el bucket `event-media`.
+- El carrito vive solo en memoria durante la navegación; no persiste en el navegador. Al crear la orden, el backend guarda comprador y líneas y recalcula precios e inventario.
+- Aún no se ha seleccionado una pasarela. No hay cobro, confirmación de pago ni emisión automática: `issue_paid_order_tickets` solo debe invocarse desde una función servidor después de verificar una confirmación auténtica del proveedor.
+- `src/data/ticketPdf.js` prepara el PDF a partir de credenciales de una entrada ya emitida. No se genera para órdenes pendientes.

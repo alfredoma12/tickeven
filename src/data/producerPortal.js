@@ -1,48 +1,28 @@
-const PRODUCER_SESSION_KEY = "tickeven-producer-demo-session";
-const PUBLISHED_EVENTS_KEY = "tickeven-producer-events-v1";
+import { requireSupabase } from "./supabase.js";
 
-export function readProducerSession() {
-  return sessionStorage.getItem(PRODUCER_SESSION_KEY);
+export async function signInProducer(email, password) {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+  if (error) throw error;
+  return data;
 }
 
-export function startProducerDemoSession(username, password) {
-  const normalizedUsername = username.trim();
-  if (!normalizedUsername || !password) {
-    throw new Error("Ingresa tu usuario y contraseña.");
-  }
-
-  sessionStorage.setItem(PRODUCER_SESSION_KEY, normalizedUsername);
-  return normalizedUsername;
+export async function signUpProducer(email, password, username) {
+  const client = requireSupabase();
+  const { data, error } = await client.auth.signUp({
+    email: email.trim().toLowerCase(),
+    password,
+    options: { data: { username: username.trim() } },
+  });
+  if (error) throw error;
+  return data;
 }
 
-export function endProducerSession() {
-  sessionStorage.removeItem(PRODUCER_SESSION_KEY);
-}
-
-export function readPublishedEvents() {
-  const storedEvents = localStorage.getItem(PUBLISHED_EVENTS_KEY);
-  if (!storedEvents) return [];
-
-  const parsedEvents = JSON.parse(storedEvents);
-  if (!Array.isArray(parsedEvents)) {
-    throw new TypeError("Los eventos publicados guardados no tienen un formato válido.");
-  }
-
-  return parsedEvents.filter((event) =>
-    event !== null &&
-    typeof event === "object" &&
-    Number.isSafeInteger(event.id) &&
-    typeof event.title === "string" &&
-    typeof event.slug === "string" &&
-    typeof event.image === "string" &&
-    Array.isArray(event.ticketTypes) &&
-    event.ticketTypes.length > 0
-  );
-}
-
-export function publishProducerEvent(event) {
-  const currentEvents = readPublishedEvents();
-  const updatedEvents = [event, ...currentEvents];
-  localStorage.setItem(PUBLISHED_EVENTS_KEY, JSON.stringify(updatedEvents));
-  return updatedEvents;
+export async function endProducerSession() {
+  const client = requireSupabase();
+  const { error } = await client.auth.signOut();
+  if (error) throw error;
 }

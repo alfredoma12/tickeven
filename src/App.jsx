@@ -21,13 +21,31 @@ import CheckoutPage from "./components/CheckoutPage.jsx";
 import EventDetailPage from "./components/EventDetailPage.jsx";
 import ProducerAuthPage from "./components/ProducerAuthPage.jsx";
 import ProducerDashboard from "./components/ProducerDashboard.jsx";
-import { getCartLines, getCartTotals, readCart, writeCart } from "./data/cart.js";
-import { publishProducerEvent, readPublishedEvents } from "./data/producerPortal.js";
+import { getCartLines, getCartTotals } from "./data/cart.js";
+import { fetchPublishedEvents, publishProducerEvent } from "./data/events.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "./data/pricing.js";
 
 const categories = ["Todos", "Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
+const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-const events = [
+function getRoutePath() {
+  let pathname = window.location.pathname;
+  if (appBasePath && pathname.startsWith(appBasePath)) {
+    pathname = pathname.slice(appBasePath.length) || "/";
+  }
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
+function getBrowserPath(route) {
+  const url = new URL(route, window.location.origin);
+  let pathname = url.pathname;
+  if (appBasePath && pathname.startsWith(appBasePath)) {
+    pathname = pathname.slice(appBasePath.length) || "/";
+  }
+  return `${appBasePath}${pathname}${url.search}${url.hash}` || "/";
+}
+
+const exampleEventsForMigration = [
   {
     id: 1,
     title: "Festival de música de Santiago",
@@ -265,7 +283,7 @@ const slides = [
 
 const money = new Intl.NumberFormat("es-CL");
 
-if (events.some((event) =>
+if (exampleEventsForMigration.some((event) =>
   !Number.isSafeInteger(event.ticketPrice) ||
   event.ticketPrice <= 0 ||
   !Array.isArray(event.ticketTypes) ||
@@ -339,7 +357,7 @@ function EventCard({ event, onBuy, onFavorite, favorite }) {
   );
 }
 
-function HomePage({ cartCount, events }) {
+function HomePage({ cartCount, events, loading, error, onNavigate }) {
   const [category, setCategory] = useState("Todos");
   const [city, setCity] = useState("Todas las ciudades");
   const [search, setSearch] = useState("");
@@ -376,7 +394,7 @@ function HomePage({ cartCount, events }) {
       showNotice("No pudimos agregar este evento. Intenta nuevamente.");
       return;
     }
-    window.location.href = `/evento/${eventSlug(event)}`;
+    onNavigate(`/evento/${eventSlug(event)}`);
   };
 
   const toggleFavorite = (id) => {
@@ -479,7 +497,7 @@ function HomePage({ cartCount, events }) {
               <button
                 className="hero__cta"
                 type="button"
-                onClick={() => handleBuy(events.find((event) => event.id === currentSlide.eventId))}
+                onClick={() => handleBuy(events.find((event) => event.id === String(currentSlide.eventId)))}
               >
                 Encuentra tus entradas <ArrowUpRight size={17} />
               </button>
@@ -535,7 +553,15 @@ function HomePage({ cartCount, events }) {
             </button>
           </div>
 
-          {filteredEvents.length ? (
+          {loading ? (
+            <div className="events-loading" role="status">Conectando con TickEven…</div>
+          ) : error ? (
+            <div className="events-load-error" role="alert">
+              <strong>No pudimos cargar los eventos desde Supabase.</strong>
+              <span>{error}</span>
+              <button type="button" onClick={() => window.location.reload()}>Volver a intentar</button>
+            </div>
+          ) : filteredEvents.length ? (
             renderEventGrid(filteredEvents)
           ) : (
             <div className="empty-state">
@@ -628,28 +654,74 @@ function HomePage({ cartCount, events }) {
 }
 
 function App() {
-  const [cart, setCart] = useState(readCart);
-  const [publishedEvents, setPublishedEvents] = useState(readPublishedEvents);
-  const allEvents = useMemo(() => [...events, ...publishedEvents], [publishedEvents]);
-  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  const [cart, setCart] = useState([]);
+  const [publishedEvents, setPublishedEvents] = useState([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventsError, setEventsError] = useState("");
+  const [path, setPath] = useState(getRoutePath);
+  const allEvents = publishedEvents;
   const lines = useMemo(() => getCartLines(cart, allEvents), [cart, allEvents]);
   const totals = useMemo(() => getCartTotals(lines), [lines]);
 
   useEffect(() => {
-    writeCart(cart);
-  }, [cart]);
+    let active = true;
+    fetchPublishedEvents()
+      .then((loadedEvents) => {
+        if (active) setPublishedEvents(loadedEvents);
+      })
+      .catch((error) => {
+        console.error("No se pudieron leer los eventos publicados.", error);
+        if (active) setEventsError(error.message);
+      })
+      .finally(() => {
+        if (active) setEventsLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const navigate = (to, { replace = false } = {}) => {
+    const browserPath = getBrowserPath(to);
+    if (replace) window.history.replaceState(null, "", browserPath);
+    else window.history.pushState(null, "", browserPath);
+    setPath(getRoutePath());
+    window.scrollTo({ top: 0, behavior: "auto" });
+  };
+
+  useEffect(() => {
+    const handleClick = (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const link = event.target.closest("a[href]");
+      if (!link || link.hasAttribute("download")) return;
+      const target = new URL(link.href, window.location.href);
+      if (target.origin !== window.location.origin) return;
+      if (link.target === "_blank") {
+        if (appBasePath && !target.pathname.startsWith(appBasePath)) {
+          link.href = getBrowserPath(`${target.pathname}${target.search}${target.hash}`);
+        }
+        return;
+      }
+      if (target.hash && target.pathname === window.location.pathname) return;
+      event.preventDefault();
+      navigate(`${target.pathname}${target.search}${target.hash}`);
+    };
+    const handlePopState = () => setPath(getRoutePath());
+    document.addEventListener("click", handleClick);
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      document.removeEventListener("click", handleClick);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   const addToCart = (event, selectedTickets, buyer) => {
     const additions = selectedTickets.map((ticketType) => ({
-      cartItemId: `${event.id}-${ticketType.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      cartItemId: `${event.id}-${ticketType.id}-${crypto.randomUUID()}`,
       eventId: event.id,
       ticketTypeId: ticketType.id,
       quantity: ticketType.quantity,
       buyer,
     }));
-    const updatedCart = [...cart, ...additions];
-    writeCart(updatedCart);
-    setCart(updatedCart);
+    setCart((current) => [...current, ...additions]);
   };
 
   const updateQuantity = (cartItemId, quantity) => {
@@ -667,27 +739,29 @@ function App() {
     setCart((current) => current.filter((item) => item.cartItemId !== cartItemId));
   };
 
-  const handlePublishEvent = (event) => {
-    const updatedEvents = publishProducerEvent(event);
-    setPublishedEvents(updatedEvents);
+  const handlePublishEvent = async (event) => {
+    const savedEvent = await publishProducerEvent(event);
+    setPublishedEvents((current) => [savedEvent, ...current]);
+    return savedEvent;
   };
 
   if (path === "/productores") return <ProducerPage />;
-  if (path === "/productores/login") return <ProducerAuthPage />;
+  if (path === "/productores/login") return <ProducerAuthPage onNavigate={navigate} />;
   if (path === "/productores/dashboard") {
-    return <ProducerDashboard events={publishedEvents} onPublish={handlePublishEvent} />;
+    return <ProducerDashboard onPublish={handlePublishEvent} onNavigate={navigate} />;
   }
   if (path.startsWith("/evento/")) {
     const requestedSlug = path.slice("/evento/".length);
     const event = allEvents.find((candidate) => eventSlug(candidate) === requestedSlug);
-    return <EventDetailPage event={event} cartCount={totals.quantity} onAddToCart={addToCart} />;
+    if (eventsLoading) return <main className="events-loading">Cargando evento…</main>;
+    return <EventDetailPage event={event} cartCount={totals.quantity} onAddToCart={addToCart} onNavigate={navigate} />;
   }
   if (path === "/carrito") {
-    return <CartPage lines={lines} totals={totals} onUpdateQuantity={updateQuantity} onRemove={removeFromCart} />;
+    return <CartPage lines={lines} totals={totals} onUpdateQuantity={updateQuantity} onRemove={removeFromCart} onNavigate={navigate} />;
   }
   if (path === "/checkout") return <CheckoutPage lines={lines} totals={totals} />;
 
-  return <HomePage cartCount={totals.quantity} events={allEvents} />;
+  return <HomePage cartCount={totals.quantity} events={allEvents} loading={eventsLoading} error={eventsError} onNavigate={navigate} />;
 }
 
 export default App;

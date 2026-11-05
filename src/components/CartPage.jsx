@@ -30,7 +30,7 @@ export function PurchaseSummary({ totals, actionLabel, onAction, disabled = fals
   );
 }
 
-export default function CartPage({ lines, totals, onUpdateQuantity, onRemove }) {
+export default function CartPage({ lines, totals, onUpdateQuantity, onRemove, onNavigate }) {
   useEffect(() => {
     document.title = "Tu carrito — TickEven.cl";
   }, []);
@@ -94,7 +94,7 @@ export default function CartPage({ lines, totals, onUpdateQuantity, onRemove }) 
             <PurchaseSummary
               totals={totals}
               actionLabel="Continuar al checkout"
-              onAction={() => { window.location.href = "/checkout"; }}
+              onAction={() => onNavigate("/checkout")}
               note="El costo de administración se detalla por cada entrada."
             />
           </div>
@@ -106,7 +106,7 @@ export default function CartPage({ lines, totals, onUpdateQuantity, onRemove }) 
             <a href="/">Descubrir eventos <ArrowRight size={15} /></a>
           </section>
         )}
-        <p className="purchase-demo-note">Esta experiencia es una demostración. El pago se habilitará al integrar la pasarela.</p>
+        <p className="purchase-demo-note">El carrito dura mientras navegas por TickEven; al continuar, la orden queda registrada en Supabase. El pago se habilitará al integrar una pasarela.</p>
       </div>
     </main>
   );

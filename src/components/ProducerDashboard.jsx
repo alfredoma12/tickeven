@@ -13,7 +13,9 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { endProducerSession, readProducerSession } from "../data/producerPortal.js";
+import { fetchProducerEvents } from "../data/events.js";
+import { endProducerSession } from "../data/producerPortal.js";
+import { requireSupabase } from "../data/supabase.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "../data/pricing.js";
 
 const categories = ["Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
@@ -63,7 +65,13 @@ async function optimizeImage(file) {
   }
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
-  return canvas.toDataURL("image/jpeg", 0.78);
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob((result) => {
+      if (result) resolve(result);
+      else reject(new Error("No fue posible convertir la imagen."));
+    }, "image/jpeg", 0.78);
+  });
+  return { blob, preview: URL.createObjectURL(blob) };
 }
 
 function newTicketType(index) {
@@ -170,7 +178,7 @@ function CreateEventTab({ onPublish, onCancel }) {
     }
   };
 
-  const submitEvent = (event) => {
+  const submitEvent = async (event) => {
     event.preventDefault();
     setPublishError("");
     setSaving(true);
@@ -216,20 +224,20 @@ function CreateEventTab({ onPublish, onCancel }) {
       description: String(formData.get("description")).trim(),
       ticketTypes: validTicketTypes,
       ticketPrice: Math.min(...validTicketTypes.map((ticketType) => ticketType.price)),
-      image: photos[0],
+      image: photos[0].preview,
       imageAlt: `Fotografía del evento ${title}`,
-      gallery: photos.slice(1),
+      gallery: photos.slice(1).map((photo) => photo.preview),
+      photos,
       color: ["lavender", "peach", "blue", "mint"][now % 4],
       weekend: [0, 6].includes(new Date(`${selectedDate}T12:00:00`).getDay()),
-      organizer: readProducerSession(),
       publishedAt: new Date().toISOString(),
     };
 
     try {
-      onPublish(eventData);
+      await onPublish(eventData);
     } catch (error) {
       console.error("No se pudo guardar el evento publicado.", error);
-      setPublishError(error.message || "No se pudo guardar el evento. Revisa el almacenamiento disponible e inténtalo nuevamente.");
+      setPublishError(error.message || "No se pudo guardar el evento en Supabase. Inténtalo nuevamente.");
       setSaving(false);
     }
   };
@@ -265,10 +273,10 @@ function CreateEventTab({ onPublish, onCancel }) {
           {photos.length > 0 && (
             <div className="producer-photo-previews">
               {photos.map((photo, index) => (
-                <div key={`${index}-${photo.slice(0, 30)}`}>
-                  <img src={photo} alt={`Vista previa ${index + 1}`} />
+                <div key={`${index}-${photo.preview}`}>
+                  <img src={photo.preview} alt={`Vista previa ${index + 1}`} />
                   <span>{index === 0 ? "Portada" : `Foto ${index + 1}`}</span>
-                  <button type="button" aria-label={`Quitar foto ${index + 1}`} onClick={() => setPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index))}><Trash2 size={14} /></button>
+                  <button type="button" aria-label={`Quitar foto ${index + 1}`} onClick={() => { URL.revokeObjectURL(photo.preview); setPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index)); }}><Trash2 size={14} /></button>
                 </div>
               ))}
             </div>
@@ -304,31 +312,68 @@ function CreateEventTab({ onPublish, onCancel }) {
   );
 }
 
-export default function ProducerDashboard({ events, onPublish }) {
-  const [producer, setProducer] = useState(() => readProducerSession());
+export default function ProducerDashboard({ onPublish, onNavigate }) {
+  const [producer, setProducer] = useState(null);
+  const [producerEvents, setProducerEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [notice, setNotice] = useState("");
-  const producerEvents = events.filter((event) => event.organizer === producer);
 
   useEffect(() => {
     document.title = "Dashboard de productores — TickEven.cl";
-    if (!producer) window.location.replace("/productores/login");
-  }, [producer]);
+    let active = true;
+    const client = requireSupabase();
+    client.auth.getSession().then(async ({ data, error }) => {
+      if (error) throw error;
+      if (!data.session?.user) {
+        onNavigate("/productores/login", { replace: true });
+        return;
+      }
+      if (!active) return;
+      setProducer(data.session.user);
+      const rows = await fetchProducerEvents(data.session.user.id);
+      if (active) setProducerEvents(rows);
+    }).catch((error) => {
+      console.error("No se pudo cargar la sesión o los eventos del productor.", error);
+      if (active) setLoadError(error.message || "No se pudo conectar con Supabase.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    const { data: authListener } = client.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_OUT" || !session?.user) {
+        setProducer(null);
+        onNavigate("/productores/login", { replace: true });
+      }
+    });
+    return () => {
+      active = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
 
-  const signOut = () => {
-    endProducerSession();
-    setProducer("");
-    window.location.replace("/productores/login");
+  const signOut = async () => {
+    try {
+      await endProducerSession();
+      onNavigate("/productores/login", { replace: true });
+    } catch (error) {
+      console.error("No se pudo cerrar la sesión de Supabase.", error);
+      setLoadError("No se pudo cerrar la sesión. Inténtalo otra vez.");
+    }
   };
 
-  const publishEvent = (event) => {
-    onPublish(event);
+  const publishEvent = async (event) => {
+    const savedEvent = await onPublish(event);
+    setProducerEvents((current) => [savedEvent, ...current]);
     setActiveTab("overview");
-    setNotice(`“${event.title}” ya está publicado.`);
+    setNotice(`“${savedEvent.title}” ya está publicado en Supabase.`);
     window.setTimeout(() => setNotice(""), 6000);
   };
 
+  if (loading) return <main className="producer-dashboard-loading">Conectando con Supabase…</main>;
+  if (loadError) return <main className="producer-dashboard-loading" role="alert">{loadError} <a href="/productores/login">Volver al acceso</a></main>;
   if (!producer) return null;
+  const producerName = producer.user_metadata?.username || producer.email;
 
   return (
     <div className="producer-dashboard">
@@ -340,7 +385,7 @@ export default function ProducerDashboard({ events, onPublish }) {
         <button className={activeTab === "overview" ? "is-active" : ""} type="button" onClick={() => setActiveTab("overview")}><LayoutDashboard size={17} /> Resumen</button>
         <button className={activeTab === "events" ? "is-active" : ""} type="button" onClick={() => setActiveTab("events")}><Ticket size={17} /> Mis eventos <span>{producerEvents.length}</span></button>
         <button className="producer-dashboard-sidebar__create" type="button" onClick={() => setActiveTab("create")}><Plus size={16} /> Crear evento</button>
-        <div className="producer-dashboard-sidebar__account"><span>{producer.slice(0, 1).toUpperCase()}</span><div><strong>{producer}</strong><small>Cuenta de demostración</small></div><button type="button" aria-label="Cerrar sesión" onClick={signOut}><LogOut size={16} /></button></div>
+        <div className="producer-dashboard-sidebar__account"><span>{producerName.slice(0, 1).toUpperCase()}</span><div><strong>{producerName}</strong><small>Cuenta Supabase</small></div><button type="button" aria-label="Cerrar sesión" onClick={signOut}><LogOut size={16} /></button></div>
       </aside>
       <main className="producer-dashboard-main">
         <header className="producer-dashboard-topbar">
@@ -355,7 +400,7 @@ export default function ProducerDashboard({ events, onPublish }) {
         ) : (
           <OverviewTab events={producerEvents} onCreate={() => setActiveTab("create")} />
         )}
-        <footer className="producer-dashboard-footer"><span>Modo de demostración: los eventos se guardan en este navegador, no en un servidor.</span><a href="/productores">Conocer TickEven <MapPin size={13} /></a></footer>
+        <footer className="producer-dashboard-footer"><span>Tus eventos e imágenes se guardan en Supabase.</span><a href="/productores">Conocer TickEven <MapPin size={13} /></a></footer>
       </main>
     </div>
   );

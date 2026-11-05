@@ -56,7 +56,7 @@ function NotFound() {
   );
 }
 
-export default function EventDetailPage({ event, cartCount, onAddToCart }) {
+export default function EventDetailPage({ event, cartCount, onAddToCart, onNavigate }) {
   const [selectedImage, setSelectedImage] = useState(event?.image ?? "");
   const [quantities, setQuantities] = useState({});
   const [buyerFormOpen, setBuyerFormOpen] = useState(false);
@@ -117,7 +117,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart }) {
 
     setRutError("");
     onAddToCart(event, selectedTickets, buyer);
-    window.location.href = "/carrito";
+    onNavigate("/carrito");
   };
 
   const gallery = [...new Set([event.image, ...event.gallery])];

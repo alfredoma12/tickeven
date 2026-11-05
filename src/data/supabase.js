@@ -6,20 +6,32 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 
 export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseKey)
+  ? createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        storage: window.sessionStorage,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
+    })
   : null;
 
-export async function createPendingOrder({ checkoutKey, lines }) {
+export function requireSupabase() {
   if (!supabase) {
-    throw new Error("Falta configurar Supabase. Revisa las variables VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY.");
+    throw new Error("Supabase no está configurado. Revisa las variables de entorno de la aplicación.");
   }
+  return supabase;
+}
+
+export async function createPendingOrder({ checkoutKey, lines }) {
+  const client = requireSupabase();
 
   const firstBuyer = lines[0]?.buyer;
   if (!firstBuyer || lines.some((line) => !line.buyer)) {
     throw new Error("Completa los datos del comprador para todas las entradas antes de continuar.");
   }
 
-  const { data, error } = await supabase.functions.invoke("create-order", {
+  const { data, error } = await client.functions.invoke("create-order", {
     body: {
       checkout_key: checkoutKey,
       buyer: firstBuyer,

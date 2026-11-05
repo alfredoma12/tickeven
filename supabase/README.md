@@ -50,6 +50,18 @@ npx supabase functions deploy validate-ticket
 
 - Los eventos destacados se leen desde Supabase. La migración del catálogo agrega eventos de ejemplo y tipos de entrada para poder probar la página inicialmente.
 - El login/registro de productores usa Supabase Auth. Las fichas y fotos se guardan en la base de datos y el bucket `event-media`.
+- Productores y colaboradores se registran con nombre, RUT chileno, correo, teléfono y contraseña. El registro queda en estado pendiente; solo una cuenta aprobada puede publicar eventos o validar entradas.
+- Las rutas `/admin/login` y `/colaboradores/login` abren los accesos administrativos y de validación. El administrador aprueba/rechaza solicitudes y asigna colaboradores a eventos. El escáner requiere permiso de cámara y un contexto HTTPS; el código de seguridad funciona como alternativa manual.
+- Para provisionar el primer administrador, crea un usuario en Supabase Auth con sus metadatos `full_name`, `rut` válido y `phone`. Luego, desde el SQL Editor de Supabase, identifica su UUID en `auth.users` y asígnale el rol:
+
+  ```sql
+  update public.profiles
+  set role = 'admin', status = 'approved'
+  where id = 'UUID_DEL_USUARIO_ADMIN';
+  ```
+
+  No uses una clave fija como `1234` ni guardes credenciales administrativas en el frontend. La autenticación se verifica con Supabase Auth y los permisos con el rol del perfil.
+- La migración `20261105020000_account_approval_and_staff.sql` incorpora las aprobaciones, asignaciones y autorización de validación; ya está aplicada en el proyecto de producción enlazado. Para futuras migraciones, revísalas con `npx supabase db push --remote --dry-run` y solicita confirmación antes de aplicarlas.
 - El carrito vive solo en memoria durante la navegación; no persiste en el navegador. Al crear la orden, el backend guarda comprador y líneas y recalcula precios e inventario.
 - Aún no se ha seleccionado una pasarela. No hay cobro, confirmación de pago ni emisión automática: `issue_paid_order_tickets` solo debe invocarse desde una función servidor después de verificar una confirmación auténtica del proveedor.
 - `src/data/ticketPdf.js` prepara el PDF a partir de credenciales de una entrada ya emitida. No se genera para órdenes pendientes.

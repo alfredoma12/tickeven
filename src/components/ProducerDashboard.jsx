@@ -331,6 +331,17 @@ export default function ProducerDashboard({ onPublish, onNavigate }) {
         return;
       }
       if (!active) return;
+      const { data: profile, error: profileError } = await client
+        .from("profiles")
+        .select("role, status, full_name")
+        .eq("id", data.session.user.id)
+        .single();
+      if (profileError) throw profileError;
+      if (profile.role !== "producer" || profile.status !== "approved") {
+        await client.auth.signOut();
+        onNavigate("/productores/login", { replace: true });
+        return;
+      }
       setProducer(data.session.user);
       const rows = await fetchProducerEvents(data.session.user.id);
       if (active) setProducerEvents(rows);
@@ -373,7 +384,7 @@ export default function ProducerDashboard({ onPublish, onNavigate }) {
   if (loading) return <main className="producer-dashboard-loading">Conectando con Supabase…</main>;
   if (loadError) return <main className="producer-dashboard-loading" role="alert">{loadError} <a href="/productores/login">Volver al acceso</a></main>;
   if (!producer) return null;
-  const producerName = producer.user_metadata?.username || producer.email;
+  const producerName = producer.user_metadata?.full_name || producer.email;
 
   return (
     <div className="producer-dashboard">

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownRight,
   ArrowLeft,
@@ -21,12 +21,14 @@ import CheckoutPage from "./components/CheckoutPage.jsx";
 import EventDetailPage from "./components/EventDetailPage.jsx";
 import ProducerAuthPage from "./components/ProducerAuthPage.jsx";
 import ProducerDashboard from "./components/ProducerDashboard.jsx";
+import AdminDashboard from "./components/AdminDashboard.jsx";
 import { getCartLines, getCartTotals } from "./data/cart.js";
 import { fetchPublishedEvents, publishProducerEvent } from "./data/events.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "./data/pricing.js";
 
 const categories = ["Todos", "Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+const CollaboratorDashboard = lazy(() => import("./components/CollaboratorDashboard.jsx"));
 
 function getRoutePath() {
   let pathname = window.location.pathname;
@@ -679,13 +681,13 @@ function App() {
     return () => { active = false; };
   }, []);
 
-  const navigate = (to, { replace = false } = {}) => {
+  const navigate = useCallback((to, { replace = false } = {}) => {
     const browserPath = getBrowserPath(to);
     if (replace) window.history.replaceState(null, "", browserPath);
     else window.history.pushState(null, "", browserPath);
     setPath(getRoutePath());
     window.scrollTo({ top: 0, behavior: "auto" });
-  };
+  }, []);
 
   useEffect(() => {
     const handleClick = (event) => {
@@ -746,9 +748,15 @@ function App() {
   };
 
   if (path === "/productores") return <ProducerPage />;
-  if (path === "/productores/login") return <ProducerAuthPage onNavigate={navigate} />;
+  if (path === "/productores/login") return <ProducerAuthPage accountType="producer" onNavigate={navigate} />;
   if (path === "/productores/dashboard") {
     return <ProducerDashboard onPublish={handlePublishEvent} onNavigate={navigate} />;
+  }
+  if (path === "/admin/login") return <ProducerAuthPage accountType="admin" onNavigate={navigate} />;
+  if (path === "/admin/dashboard") return <AdminDashboard onNavigate={navigate} />;
+  if (path === "/colaboradores/login") return <ProducerAuthPage accountType="collaborator" onNavigate={navigate} />;
+  if (path === "/colaboradores/dashboard") {
+    return <Suspense fallback={<main className="producer-dashboard-loading">Cargando validador de entradas…</main>}><CollaboratorDashboard onNavigate={navigate} /></Suspense>;
   }
   if (path.startsWith("/evento/")) {
     const requestedSlug = path.slice("/evento/".length);

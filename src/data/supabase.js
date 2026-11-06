@@ -91,6 +91,41 @@ export async function createMercadoPagoPreference({ orderId, checkoutKey }) {
   return data;
 }
 
+export async function registerFreeOrder({ checkoutKey, buyer, items }) {
+  const { data, error } = await requireSupabase().functions.invoke("register-free-order", {
+    body: {
+      checkout_key: checkoutKey,
+      buyer,
+      items: items.map((item) => ({
+        event_id: String(item.eventId),
+        ticket_type_id: String(item.ticketTypeId),
+        quantity: item.quantity,
+      })),
+    },
+  });
+  if (error) {
+    let responseError;
+    try {
+      responseError = await error.context?.json();
+    } catch {
+      responseError = null;
+    }
+    const messages = {
+      insufficient_inventory: "Ya no hay suficientes entradas gratuitas disponibles.",
+      ticket_type_unavailable: "Este tipo de entrada gratuita ya no está disponible.",
+      invalid_buyer: "Revisa los datos del asistente; el RUT debe ser válido.",
+      order_not_free: "Esta inscripción no corresponde a una entrada gratuita.",
+      ticket_delivery_not_configured: "No se pudieron preparar las entradas. Contacta al administrador.",
+      ticket_encryption_not_configured: "No se pudieron preparar las entradas. Contacta al administrador.",
+    };
+    throw new Error(messages[responseError?.error] || error.message || "No se pudo completar la inscripción gratuita.");
+  }
+  if (typeof data?.id !== "string" || data.status !== "paid") {
+    throw new Error("No se pudo confirmar la inscripción gratuita.");
+  }
+  return data;
+}
+
 export async function getPaidOrderTickets({ orderId, checkoutKey }) {
   const { data, error } = await requireSupabase().functions.invoke("get-order-tickets", {
     body: { order_id: orderId, checkout_key: checkoutKey },

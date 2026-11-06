@@ -56,12 +56,14 @@ function NotFound() {
   );
 }
 
-export default function EventDetailPage({ event, cartCount, onAddToCart, onNavigate }) {
+export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeRegister, onNavigate }) {
   const [selectedImage, setSelectedImage] = useState(event?.image ?? "");
   const [quantities, setQuantities] = useState({});
   const [buyerFormOpen, setBuyerFormOpen] = useState(false);
   const [rut, setRut] = useState("");
   const [rutError, setRutError] = useState("");
+  const [registrationError, setRegistrationError] = useState("");
+  const [isRegistering, setIsRegistering] = useState(false);
   const buyerFormRef = useRef(null);
 
   useEffect(() => {
@@ -85,6 +87,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
   );
   const ticketCount = selectedTickets.reduce((sum, ticketType) => sum + ticketType.quantity, 0);
   const ticketSubtotal = selectedTickets.reduce((sum, ticketType) => sum + ticketType.price * ticketType.quantity, 0);
+  const isFreeSelection = selectedTickets.length > 0 && selectedTickets.every((ticketType) => ticketType.price === 0);
   const administrationTotal = selectedTickets.reduce(
     (sum, ticketType) => sum + getAdministrationFee(ticketType.price) * ticketType.quantity,
     0,
@@ -100,7 +103,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
     });
   };
 
-  const submitBuyerDetails = (formEvent) => {
+  const submitBuyerDetails = async (formEvent) => {
     formEvent.preventDefault();
     const formData = new FormData(formEvent.currentTarget);
     const buyer = {
@@ -116,6 +119,19 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
     }
 
     setRutError("");
+    setRegistrationError("");
+    if (isFreeSelection) {
+      setIsRegistering(true);
+      try {
+        await onFreeRegister(event, selectedTickets, buyer);
+      } catch (error) {
+        console.error("No se pudo completar la inscripción gratuita.", error);
+        setRegistrationError(error.message || "No se pudo completar la inscripción gratuita. Inténtalo otra vez.");
+      } finally {
+        setIsRegistering(false);
+      }
+      return;
+    }
     onAddToCart(event, selectedTickets, buyer);
     onNavigate("/carrito");
   };
@@ -203,8 +219,8 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
                       </div>
                       <div className="event-ticket-option__purchase">
                         <div>
-                          <strong>${money.format(ticketType.price)}</strong>
-                          <span>+ ${money.format(getAdministrationFee(ticketType.price))} administración ({ADMINISTRATION_PERCENTAGE})</span>
+                          <strong>{ticketType.price === 0 ? "Gratis" : `$${money.format(ticketType.price)}`}</strong>
+                          <span>{ticketType.price === 0 ? "Sin cargo de administración" : `+ $${money.format(getAdministrationFee(ticketType.price))} administración (${ADMINISTRATION_PERCENTAGE})`}</span>
                         </div>
                         <div className="quantity-control" aria-label={`Cantidad de ${ticketType.name}`}>
                           <button
@@ -244,7 +260,9 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
                     </div>
                     <UserRound size={20} />
                   </div>
-                  <p>Al continuar, se guardarán en el carrito de esta sesión. Por ahora no se envían a un servidor ni se emiten entradas.</p>
+                  <p>{isFreeSelection
+                    ? "Al confirmar, emitiremos tus entradas gratuitas al instante. No necesitas carrito ni pasar por Mercado Pago."
+                    : "Al continuar, guardaremos tus datos para preparar la compra y redirigirte al carrito."}</p>
                   <form className="event-buyer-form" onSubmit={submitBuyerDetails}>
                     <label>Nombre y apellido
                       <input name="name" autoComplete="name" placeholder="Como aparece en tu documento" required />
@@ -271,10 +289,15 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
                     </label>
                     <label className="event-buyer-form__terms">
                       <input type="checkbox" required />
-                      <span>Acepto los términos y autorizo guardar temporalmente estos datos en esta sesión para preparar la compra.</span>
+                      <span>{isFreeSelection
+                        ? "Acepto los términos y autorizo el uso de mis datos para gestionar esta inscripción y sus entradas."
+                        : "Acepto los términos y autorizo el uso de mis datos para preparar la compra y sus entradas."}</span>
                     </label>
-                    <button className="event-buyer-form__submit" type="submit">
-                      Guardar datos y continuar <ArrowRight size={17} />
+                    {registrationError && <p className="event-buyer-form__error" role="alert">{registrationError}</p>}
+                    <button className="event-buyer-form__submit" type="submit" disabled={isRegistering}>
+                      {isRegistering
+                        ? "Preparando tus entradas…"
+                        : isFreeSelection ? "Confirmar inscripción gratuita" : "Guardar datos y continuar"} <ArrowRight size={17} />
                     </button>
                   </form>
                 </section>
@@ -289,7 +312,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
                   {selectedTickets.map((ticketType) => (
                     <div className="event-order-card__item" key={ticketType.id}>
                       <span>{ticketType.quantity} × {ticketType.name}</span>
-                      <strong>${money.format(ticketType.price * ticketType.quantity)}</strong>
+                      <strong>{ticketType.price === 0 ? "Gratis" : `$${money.format(ticketType.price * ticketType.quantity)}`}</strong>
                     </div>
                   ))}
                 </div>
@@ -298,7 +321,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
               )}
               <div className="event-order-card__totals">
                 <div><span>Entradas · {ticketCount}</span><strong>${money.format(ticketSubtotal)}</strong></div>
-                <div><span>Administración ({ADMINISTRATION_PERCENTAGE})</span><strong>${money.format(administrationTotal)}</strong></div>
+                <div><span>{isFreeSelection ? "Administración" : `Administración (${ADMINISTRATION_PERCENTAGE})`}</span><strong>{isFreeSelection ? "Sin cargo" : `$${money.format(administrationTotal)}`}</strong></div>
                 <div className="event-order-card__total"><span>Total</span><strong>${money.format(ticketSubtotal + administrationTotal)}</strong></div>
               </div>
               {!buyerFormOpen ? (
@@ -308,7 +331,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
                   disabled={!ticketCount}
                   onClick={() => setBuyerFormOpen(true)}
                 >
-                  Continuar <ArrowRight size={16} />
+                  {isFreeSelection ? "Inscribirme gratis" : "Continuar"} <ArrowRight size={16} />
                 </button>
               ) : (
                 <button
@@ -319,7 +342,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onNavig
                   Editar entradas <ArrowLeft size={15} />
                 </button>
               )}
-              <p className="event-order-card__secure"><Check size={14} /> No se realizará ningún cobro todavía.</p>
+              <p className="event-order-card__secure"><Check size={14} /> {isFreeSelection ? "Inscripción gratuita · Sin Mercado Pago" : "No se realizará ningún cobro todavía."}</p>
             </aside>
           </div>
         </div>

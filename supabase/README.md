@@ -20,6 +20,7 @@ npx supabase link --project-ref TU_PROJECT_REF
 npx supabase db push
 npx supabase secrets set APP_ORIGIN=https://TU_USUARIO.github.io/TU_REPOSITORIO
 npx supabase functions deploy create-order
+npx supabase functions deploy register-free-order
 npx supabase functions deploy validate-ticket
 npx supabase functions deploy create-payment-preference
 npx supabase functions deploy mercadopago-webhook
@@ -53,7 +54,7 @@ npx supabase functions deploy get-order-tickets
 
 - Los eventos destacados se leen desde Supabase. La migración del catálogo agrega eventos de ejemplo y tipos de entrada para poder probar la página inicialmente.
 - El login/registro de productores usa Supabase Auth. Las fichas y fotos se guardan en la base de datos y el bucket `event-media`.
-- Productores y colaboradores se registran con nombre, RUT chileno, correo, teléfono y contraseña. El registro queda en estado pendiente; solo una cuenta aprobada puede publicar eventos o validar entradas.
+- Productores y colaboradores se registran con nombre, RUT chileno, correo, teléfono y contraseña. El registro queda en estado pendiente; solo una cuenta aprobada puede publicar eventos o validar entradas. En `/admin/login`, entra como administrador y revisa **Solicitudes de cuenta** en el panel; la lista se actualiza cada 20 segundos y muestra el correo de contacto.
 - Las rutas `/admin/login` y `/colaboradores/login` abren los accesos administrativos y de validación. El administrador aprueba/rechaza solicitudes y asigna colaboradores a eventos. El escáner requiere permiso de cámara y un contexto HTTPS; el código de seguridad funciona como alternativa manual.
 - Para provisionar el primer administrador, crea un usuario en Supabase Auth con sus metadatos `full_name`, `rut` válido y `phone`. Luego, desde el SQL Editor de Supabase, identifica su UUID en `auth.users` y asígnale el rol:
 
@@ -67,6 +68,7 @@ npx supabase functions deploy get-order-tickets
 - La migración `20261105020000_account_approval_and_staff.sql` incorpora las aprobaciones, asignaciones y autorización de validación; ya está aplicada en el proyecto de producción enlazado. Para futuras migraciones, revísalas con `npx supabase db push --remote --dry-run` y solicita confirmación antes de aplicarlas.
 - La migración `20261105030000_fix_chilean_rut_validation.sql` corrige la validación del RUT en el alta de usuarios para evitar que el trigger de perfil rechace RUT válidos.
 - **Mercado Pago Checkout Pro** es el método de pago integrado. El comprador paga en Mercado Pago y vuelve a TickEven; solo el webhook firmado del servidor confirma el pago y emite entradas. El navegador nunca recibe el Access Token ni puede marcar órdenes como pagadas.
+- Los productores pueden publicar tipos de entrada gratuitos con precio `$0`. En la ficha del evento, la persona registra sus datos y recibe sus entradas QR sin pasar por el carrito ni Mercado Pago. La emisión valida disponibilidad en el servidor y requiere `TICKET_CREDENTIALS_ENCRYPTION_KEY`, igual que la entrega de entradas pagadas.
 - Para crear la aplicación, entra al [panel de desarrolladores de Mercado Pago](https://www.mercadopago.cl/developers/panel), inicia sesión, crea una aplicación para **pagos online** y selecciona **Checkout Pro**. Configura la URL del webhook:
 
   ```text
@@ -95,6 +97,7 @@ npx supabase functions deploy get-order-tickets
   npx supabase functions deploy create-payment-preference
   npx supabase functions deploy mercadopago-webhook
   npx supabase functions deploy get-order-tickets
+  npx supabase functions deploy register-free-order
   ```
 
   Prueba primero con credenciales TEST y usuarios/tarjetas de prueba proporcionados por Mercado Pago. Cambia a credenciales de producción solo después de comprobar el pago aprobado, el rechazo, el retorno a TickEven, la recepción del webhook y la descarga de los PDF. Nunca uses tarjetas reales para pruebas.

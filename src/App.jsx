@@ -25,6 +25,7 @@ import AdminDashboard from "./components/AdminDashboard.jsx";
 import { getCartLines, getCartTotals } from "./data/cart.js";
 import { fetchPublishedEvents, publishProducerEvent } from "./data/events.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "./data/pricing.js";
+import { registerFreeOrder } from "./data/supabase.js";
 
 const categories = ["Todos", "Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -347,8 +348,10 @@ function EventCard({ event, onBuy, onFavorite, favorite }) {
         </p>
         <div className="event-card__bottom">
           <div className="event-card__price">
-            <p>Desde <strong>${money.format(startingPrice)}</strong></p>
-            <p>Administración ({ADMINISTRATION_PERCENTAGE}) <strong>${money.format(getAdministrationFee(startingPrice))}</strong></p>
+            <p>Desde <strong>{startingPrice === 0 ? "Gratis" : `$${money.format(startingPrice)}`}</strong></p>
+            <p>{startingPrice === 0
+              ? "Sin cargo de administración"
+              : <>Administración ({ADMINISTRATION_PERCENTAGE}) <strong>${money.format(getAdministrationFee(startingPrice))}</strong></>}</p>
           </div>
           <button className="event-card__buy" type="button" onClick={() => onBuy(event)}>
             Ver entradas <ArrowUpRight size={15} aria-hidden="true" />
@@ -743,6 +746,21 @@ function App() {
     return savedEvent;
   };
 
+  const handleFreeRegistration = async (event, selectedTickets, buyer) => {
+    const checkoutKey = crypto.randomUUID();
+    const order = await registerFreeOrder({
+      checkoutKey,
+      buyer,
+      items: selectedTickets.map((ticketType) => ({
+        eventId: event.id,
+        ticketTypeId: ticketType.id,
+        quantity: ticketType.quantity,
+      })),
+    });
+    window.sessionStorage.setItem(`tickeven:checkout:${order.id}`, checkoutKey);
+    navigate(`/checkout?payment=free&order_id=${order.id}`);
+  };
+
   if (path === "/productores") return <ProducerPage />;
   if (path === "/productores/login") return <ProducerAuthPage accountType="producer" onNavigate={navigate} />;
   if (path === "/productores/dashboard") {
@@ -760,7 +778,7 @@ function App() {
     const requestedSlug = path.slice("/evento/".length);
     const event = allEvents.find((candidate) => eventSlug(candidate) === requestedSlug);
     if (eventsLoading) return <main className="events-loading">Cargando evento…</main>;
-    return <EventDetailPage event={event} cartCount={totals.quantity} onAddToCart={addToCart} onNavigate={navigate} />;
+    return <EventDetailPage event={event} cartCount={totals.quantity} onAddToCart={addToCart} onFreeRegister={handleFreeRegistration} onNavigate={navigate} />;
   }
   if (path === "/carrito") {
     return <CartPage lines={lines} totals={totals} onUpdateQuantity={updateQuantity} onRemove={removeFromCart} onNavigate={navigate} />;

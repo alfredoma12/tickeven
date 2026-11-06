@@ -27,6 +27,7 @@ export default function CheckoutPage({ lines, totals }) {
   const search = new URLSearchParams(window.location.search);
   const returnOrderId = search.get("order_id");
   const paymentReturn = Boolean(returnOrderId && search.get("payment"));
+  const isFreeRegistration = search.get("payment") === "free";
 
   const checkPayment = useCallback(async () => {
     if (!returnOrderId) return;
@@ -67,10 +68,14 @@ export default function CheckoutPage({ lines, totals }) {
         <div className="purchase-container">
           <section className="checkout-success">
             <span>{paymentStatus === "paid" ? <Check size={26} /> : <CreditCard size={26} />}</span>
-            <p className="purchase-kicker">{paymentStatus === "paid" ? "PAGO CONFIRMADO" : "VERIFICANDO PAGO"}</p>
+            <p className="purchase-kicker">{paymentStatus === "paid"
+              ? isFreeRegistration ? "INSCRIPCIÓN GRATUITA CONFIRMADA" : "PAGO CONFIRMADO"
+              : "VERIFICANDO PAGO"}</p>
             <h1>{paymentStatus === "paid" ? <>Tus entradas están listas<span>.</span></> : <>Estamos confirmando tu pago<span>.</span></>}</h1>
             <p>{paymentStatus === "paid"
-              ? "Mercado Pago confirmó la compra. Descarga el PDF de tus entradas y presenta el QR en el acceso."
+              ? isFreeRegistration
+                ? "Tu inscripción gratuita está confirmada. Descarga el PDF y presenta el código QR en el acceso."
+                : "Mercado Pago confirmó la compra. Descarga el PDF de tus entradas y presenta el QR en el acceso."
               : search.get("payment") === "failure"
                 ? "Mercado Pago no confirmó el pago. No se emitieron entradas. Puedes comprobar nuevamente el estado por si el aviso llegó antes que la notificación."
               : "La confirmación puede tardar unos segundos. Las entradas solo aparecen después de verificar el pago con Mercado Pago."}</p>

@@ -43,6 +43,10 @@ export default function ProducerAuthPage({ accountType = "producer", onNavigate 
       const email = String(formData.get("email"));
       const password = String(formData.get("password"));
       if (mode === "signup") {
+        const confirmEmail = String(formData.get("confirmEmail"));
+        const confirmPassword = String(formData.get("confirmPassword"));
+        if (email !== confirmEmail) throw new Error("Los correos electrónicos no coinciden.");
+        if (password !== confirmPassword) throw new Error("Las contraseñas no coinciden.");
         const rut = String(formData.get("rut")).trim();
         if (!isValidRut(rut)) throw new Error("Ingresa un RUT chileno válido.");
         await signUpAccount({
@@ -113,8 +117,16 @@ export default function ProducerAuthPage({ accountType = "producer", onNavigate 
           </>}
           <label htmlFor="account-email">Correo</label>
           <input id="account-email" name="email" type="email" autoComplete="email" placeholder="tu@correo.cl" required />
+          {mode === "signup" && <>
+            <label htmlFor="account-confirm-email">Confirma tu correo</label>
+            <input id="account-confirm-email" name="confirmEmail" type="email" autoComplete="email" placeholder="Repite tu correo" required />
+          </>}
           <label htmlFor="account-password">Contraseña</label>
           <input id="account-password" name="password" type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} minLength={8} placeholder="Mínimo 8 caracteres" required />
+          {mode === "signup" && <>
+            <label htmlFor="account-confirm-password">Confirma tu contraseña</label>
+            <input id="account-confirm-password" name="confirmPassword" type="password" autoComplete="new-password" minLength={8} placeholder="Repite tu contraseña" required />
+          </>}
           {error && <p className="producer-portal-error" role="alert">{error}</p>}
           {notice && <p className="producer-auth-notice" role="status">{notice}</p>}
           <button type="submit" disabled={submitting}>{submitting ? "Conectando…" : mode === "signup" ? "Enviar solicitud de acceso" : "Ingresar"} <ArrowRight size={16} /></button>

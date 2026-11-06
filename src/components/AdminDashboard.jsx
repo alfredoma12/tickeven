@@ -40,8 +40,28 @@ export default function AdminDashboard({ onNavigate }) {
     }
     setAdmin(profile);
 
+    const pendingAccountsRequest = async () => {
+      const result = await client
+        .from("profiles")
+        .select(`${profileFields}, email`)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true });
+      if (
+        !result.error ||
+        !["42703", "PGRST204"].includes(result.error.code) ||
+        !result.error.message.toLowerCase().includes("email")
+      ) {
+        return result;
+      }
+      console.warn("La migración de correo de solicitudes aún no está aplicada.");
+      return client
+        .from("profiles")
+        .select(profileFields)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true });
+    };
     const [pendingResult, collaboratorsResult, eventsResult, assignmentsResult] = await Promise.all([
-      client.from("profiles").select(profileFields).eq("status", "pending").order("created_at", { ascending: true }),
+      pendingAccountsRequest(),
       client.from("profiles").select(profileFields).eq("role", "collaborator").eq("status", "approved").order("full_name"),
       client.from("events").select("id, title, starts_at").eq("status", "published").order("starts_at", { ascending: true }),
       client.from("event_staff").select("event_id, collaborator_id, assigned_at").order("assigned_at", { ascending: false }),
@@ -52,6 +72,7 @@ export default function AdminDashboard({ onNavigate }) {
     setCollaborators(collaboratorsResult.data ?? []);
     setEvents(eventsResult.data ?? []);
     setAssignments(assignmentsResult.data ?? []);
+    setError("");
   }, [onNavigate]);
 
   useEffect(() => {
@@ -69,8 +90,15 @@ export default function AdminDashboard({ onNavigate }) {
     const { data: listener } = client.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || !session?.user) onNavigate("/admin/login", { replace: true });
     });
+    const refreshTimer = window.setInterval(() => {
+      loadDashboard().catch((loadError) => {
+        console.error("No se pudieron actualizar las solicitudes de acceso.", loadError);
+        if (active) setError(loadError.message || "No se pudieron actualizar las solicitudes.");
+      });
+    }, 20000);
     return () => {
       active = false;
+      window.clearInterval(refreshTimer);
       listener.subscription.unsubscribe();
     };
   }, [loadDashboard, onNavigate]);
@@ -177,7 +205,7 @@ export default function AdminDashboard({ onNavigate }) {
 
         <section className="admin-dashboard__content" id="solicitudes">
           <div className="producer-dashboard-welcome">
-            <div><span className="producer-dashboard-kicker">CONTROL DE ACCESO</span><h2>Solicitudes de cuenta</h2><p>Aprueba productores y colaboradores antes de que puedan acceder a sus herramientas.</p></div>
+            <div><span className="producer-dashboard-kicker">CONTROL DE ACCESO</span><h2>Solicitudes de cuenta</h2><p>Aprueba productores y colaboradores antes de que puedan acceder a sus herramientas. La lista se actualiza automáticamente cada 20 segundos.</p></div>
           </div>
           <div className="admin-dashboard__accounts">
             {pendingAccounts.length ? pendingAccounts.map((profile) => (
@@ -185,7 +213,8 @@ export default function AdminDashboard({ onNavigate }) {
                 <div className="admin-dashboard__avatar">{profile.full_name?.slice(0, 1).toUpperCase() || "?"}</div>
                 <div className="admin-dashboard__identity">
                   <strong>{profile.full_name}</strong>
-                  <span>{profile.role === "collaborator" ? "Colaborador" : "Productor"} · RUT {profile.rut}</span>
+                  <span>{profile.role === "collaborator" ? "Colaborador/a" : "Productor/a"} · RUT {profile.rut}</span>
+                  {profile.email && <span>{profile.email}</span>}
                   <span>{profile.phone}</span>
                 </div>
                 <div className="admin-dashboard__actions">

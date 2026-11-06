@@ -199,11 +199,11 @@ function CreateEventTab({ onPublish, onCancel }) {
     if (validTicketTypes.some((ticketType) =>
       !ticketType.name ||
       !Number.isSafeInteger(ticketType.price) ||
-      ticketType.price <= 0 ||
+      ticketType.price < 0 ||
       !Number.isSafeInteger(ticketType.available) ||
       ticketType.available <= 0
     )) {
-      setPublishError("Revisa los nombres, precios y cantidades disponibles de las entradas.");
+      setPublishError("Revisa los nombres, precios (mayores o iguales a $0) y cantidades disponibles de las entradas.");
       setSaving(false);
       return;
     }
@@ -284,7 +284,7 @@ function CreateEventTab({ onPublish, onCancel }) {
         </section>
 
         <section className="producer-event-form__section">
-          <div className="producer-event-form__section-heading"><span>03</span><div><h3>Tipos de entrada e inventario</h3><p>Configura el precio y la cantidad disponible de cada tipo. Se añade un 10% de administración.</p></div></div>
+          <div className="producer-event-form__section-heading"><span>03</span><div><h3>Tipos de entrada e inventario</h3><p>Configura el precio y la cantidad disponible. Las entradas a $0 son gratuitas y no tienen cargo de administración.</p></div></div>
           <div className="producer-ticket-editor">
             {ticketTypes.map((ticketType, index) => (
               <fieldset key={ticketType.id}>
@@ -292,7 +292,7 @@ function CreateEventTab({ onPublish, onCancel }) {
                 {ticketTypes.length > 1 && <button className="producer-ticket-editor__remove" type="button" aria-label={`Quitar tipo de entrada ${index + 1}`} onClick={() => removeTicketType(index)}><Trash2 size={15} /></button>}
                 <div className="producer-event-form__grid">
                   <label>Nombre<input value={ticketType.name} onChange={(event) => updateTicketType(index, "name", event.target.value)} placeholder="Ej. Acceso general" maxLength={60} required /></label>
-                  <label>Precio por entrada (CLP)<input type="number" min="1" step="1" value={ticketType.price} onChange={(event) => updateTicketType(index, "price", event.target.value)} placeholder="15000" required /><small>Administración: {ticketType.price > 0 ? `$${money.format(getAdministrationFee(Number(ticketType.price)))}` : "$0"} ({ADMINISTRATION_PERCENTAGE})</small></label>
+                  <label>Precio por entrada (CLP)<input type="number" min="0" step="1" value={ticketType.price} onChange={(event) => updateTicketType(index, "price", event.target.value)} placeholder="15000" required /><small>{Number(ticketType.price) === 0 ? "Entrada gratuita · sin cargo de administración" : `Administración: $${money.format(getAdministrationFee(Number(ticketType.price)))} (${ADMINISTRATION_PERCENTAGE})`}</small></label>
                   <label>Cantidad disponible<input type="number" min="1" step="1" value={ticketType.available} onChange={(event) => updateTicketType(index, "available", event.target.value)} placeholder="100" required /></label>
                   <label>Descripción (opcional)<input value={ticketType.description} onChange={(event) => updateTicketType(index, "description", event.target.value)} placeholder="Detalles de esta entrada" maxLength={160} /></label>
                 </div>

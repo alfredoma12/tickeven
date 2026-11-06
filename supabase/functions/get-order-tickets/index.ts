@@ -61,7 +61,7 @@ Deno.serve(async (request: Request) => {
   });
   const { data: order, error: orderError } = await admin
     .from("orders")
-    .select("id, checkout_key, status")
+    .select("id, checkout_key, status, created_at")
     .eq("id", orderId)
     .eq("checkout_key", checkoutKey)
     .maybeSingle();
@@ -74,7 +74,7 @@ Deno.serve(async (request: Request) => {
 
   const { data: items, error: itemsError } = await admin
     .from("order_items")
-    .select("id, event_id, ticket_type_id, buyer_name, buyer_rut")
+    .select("id, event_id, ticket_type_id, unit_price_clp, administration_fee_clp, buyer_name, buyer_rut")
     .eq("order_id", orderId);
   if (itemsError) {
     console.error("Could not load paid order items.", itemsError.message);
@@ -83,7 +83,7 @@ Deno.serve(async (request: Request) => {
   const eventIds = [...new Set((items ?? []).map((item) => item.event_id))];
   const ticketTypeIds = [...new Set((items ?? []).map((item) => item.ticket_type_id))];
   const [{ data: events, error: eventsError }, { data: ticketTypes, error: typesError }] = await Promise.all([
-    admin.from("events").select("id, title").in("id", eventIds),
+    admin.from("events").select("id, title, category, starts_at, venue, city").in("id", eventIds),
     admin.from("ticket_types").select("event_id, id, name").in("event_id", eventIds).in("id", ticketTypeIds),
   ]);
   if (eventsError || typesError) {
@@ -134,7 +134,14 @@ Deno.serve(async (request: Request) => {
         id: ticket.id,
         eventId: item.event_id,
         eventTitle: event.title,
+        eventCategory: event.category,
+        eventStartsAt: event.starts_at,
+        eventVenue: event.venue,
+        eventCity: event.city,
+        orderCreatedAt: order.created_at,
         ticketType: ticketType.name,
+        unitPriceClp: item.unit_price_clp,
+        administrationFeeClp: item.administration_fee_clp,
         attendeeName: item.buyer_name,
         attendeeRut: item.buyer_rut,
         qrToken: await decryptCredential(secret.qr_token_encrypted, encryptionKey),

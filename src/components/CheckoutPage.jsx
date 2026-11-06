@@ -60,7 +60,17 @@ export default function CheckoutPage({ lines, totals }) {
   if (paymentReturn) {
     const ticketsByEvent = paymentTickets.reduce((groups, ticket) => {
       const eventKey = `${ticket.eventId}:${ticket.eventTitle}`;
-      (groups[eventKey] ??= { title: ticket.eventTitle, tickets: [] }).tickets.push(ticket);
+      (groups[eventKey] ??= {
+        title: ticket.eventTitle,
+        event: {
+          title: ticket.eventTitle,
+          category: ticket.eventCategory,
+          startsAt: ticket.eventStartsAt,
+          venue: ticket.eventVenue,
+          city: ticket.eventCity,
+        },
+        tickets: [],
+      }).tickets.push(ticket);
       return groups;
     }, {});
     return (
@@ -95,7 +105,12 @@ export default function CheckoutPage({ lines, totals }) {
                   setDownloadingEvent(eventKey);
                   try {
                     const { downloadTicketPdf } = await import("../data/ticketPdf.js");
-                    await downloadTicketPdf({ eventTitle: group.title, tickets: group.tickets });
+                    await downloadTicketPdf({
+                      eventTitle: group.title,
+                      event: group.event,
+                      tickets: group.tickets,
+                      orderId: returnOrderId,
+                    });
                   } catch (error) {
                     console.error("No se pudo generar el PDF de las entradas.", error);
                     setPdfError(error.message || "No se pudo generar el PDF. Inténtalo otra vez.");

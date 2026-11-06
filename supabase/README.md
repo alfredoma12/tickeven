@@ -83,10 +83,12 @@ npx supabase functions deploy get-order-tickets
   Configura los secretos de las Edge Functions (usa tus credenciales de prueba primero):
 
   ```powershell
-  npx supabase secrets set MERCADOPAGO_ACCESS_TOKEN=TEST-... MERCADOPAGO_WEBHOOK_SECRET=... TICKET_CREDENTIALS_ENCRYPTION_KEY=... APP_PUBLIC_URL=https://alfredoma12.github.io/tickeven
+  npx supabase secrets set MERCADOPAGO_ACCESS_TOKEN=TOKEN_DE_PRUEBA MERCADOPAGO_WEBHOOK_SECRET=... MERCADOPAGO_CHECKOUT_MODE=test TICKET_CREDENTIALS_ENCRYPTION_KEY=... APP_PUBLIC_URL=https://alfredoma12.github.io/tickeven
   ```
 
-  `APP_PUBLIC_URL` debe ser la URL base exacta del sitio, incluyendo `/tickeven` para GitHub Pages. `APP_ORIGIN` continúa siendo solo el origen `https://alfredoma12.github.io`. Opcionalmente, configura `MERCADOPAGO_COLLECTOR_ID` con el ID de vendedor que debe recibir los pagos.
+  `TOKEN_DE_PRUEBA` se copia desde las credenciales de prueba de la aplicación de Mercado Pago. No identifiques el entorno solo por el prefijo: la documentación de Checkout Pro muestra credenciales de prueba con prefijo `APP_USR`. `MERCADOPAGO_CHECKOUT_MODE=test` selecciona la URL sandbox; para cobros reales se requiere cambiar explícitamente a `production` junto con las credenciales de producción. `APP_PUBLIC_URL` debe ser la URL base exacta del sitio, incluyendo `/tickeven` para GitHub Pages. `APP_ORIGIN` continúa siendo solo el origen `https://alfredoma12.github.io`. Opcionalmente, configura `MERCADOPAGO_COLLECTOR_ID` con el ID de vendedor que debe recibir los pagos.
+
+  Para el procedimiento y casos de prueba, consulta [MERCADOPAGO_TESTING.md](MERCADOPAGO_TESTING.md).
 - Una vez aplicada la migración de pagos, despliega las funciones:
 
   ```powershell

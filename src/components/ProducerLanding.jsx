@@ -59,6 +59,7 @@ const faqs = [
 ];
 
 const brandColors = [
+  { name: "Verde", value: "#2f7d4a" },
   { name: "Violeta", value: "#6c5ce7" },
   { name: "Turquesa", value: "#007f86" },
   { name: "Coral", value: "#c84a36" },
@@ -211,7 +212,7 @@ function SalesDashboard({ segment, setSegment }) {
             <div className="producer-chart__area">
               <span>$90M</span><span>$60M</span><span>$30M</span>
               <svg viewBox="0 0 450 130" preserveAspectRatio="none" role="img" aria-label="Gráfico de ventas ascendentes">
-                <defs><linearGradient id="sales-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#6c5ce7" stopOpacity=".3" /><stop offset="100%" stopColor="#6c5ce7" stopOpacity="0" /></linearGradient></defs>
+                <defs><linearGradient id="sales-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#2f7d4a" stopOpacity=".3" /><stop offset="100%" stopColor="#2f7d4a" stopOpacity="0" /></linearGradient></defs>
                 <path d="M0 105 C35 98 39 82 75 88 S120 78 145 83 S188 48 220 62 S266 65 290 39 S340 48 362 30 S406 34 450 8 V130 H0Z" fill="url(#sales-fill)" />
                 <path d="M0 105 C35 98 39 82 75 88 S120 78 145 83 S188 48 220 62 S266 65 290 39 S340 48 362 30 S406 34 450 8" fill="none" stroke="#88ac42" strokeWidth="3" vectorEffect="non-scaling-stroke" />
               </svg>

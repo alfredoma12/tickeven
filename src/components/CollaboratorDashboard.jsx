@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
-import { Camera, Check, CircleAlert, LogOut, RefreshCw, ShieldCheck, Ticket } from "lucide-react";
+import { Camera, Check, CircleAlert, CircleX, Clock3, LogOut, RefreshCw, ScanLine, ShieldCheck, Ticket, TriangleAlert, Wifi, WifiOff } from "lucide-react";
 import { endProducerSession } from "../data/producerPortal.js";
 import { requireSupabase } from "../data/supabase.js";
 
@@ -9,7 +9,14 @@ const validationMessages = {
   not_found: "No encontramos una entrada válida con esos datos para tus eventos asignados.",
   invalid_credentials: "Los datos del código no son válidos.",
   account_not_approved: "La cuenta no tiene autorización para validar entradas.",
+  event_not_assigned: "No tienes permiso para validar entradas de este evento.",
+  other_event: "Esta entrada pertenece a otro evento.",
+  invalid_ticket: "La entrada no es válida.",
 };
+
+const formatDateTime = (value) => value
+  ? new Intl.DateTimeFormat("es-CL", { dateStyle: "medium", timeStyle: "medium" }).format(new Date(value))
+  : "Sin registros";
 
 function readQrPayload(value) {
   let payload;
@@ -27,15 +34,26 @@ function readQrPayload(value) {
 export default function CollaboratorDashboard({ onNavigate }) {
   const [profile, setProfile] = useState(null);
   const [assignedEvents, setAssignedEvents] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const [dashboardData, setDashboardData] = useState(null);
   const [securityCode, setSecurityCode] = useState("");
   const [validation, setValidation] = useState(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [cameraState, setCameraState] = useState("idle");
+  const [connectionState, setConnectionState] = useState("checking");
+  const [serverLatency, setServerLatency] = useState(null);
+  const [lastSync, setLastSync] = useState(null);
+  const [connectionRestored, setConnectionRestored] = useState(false);
   const videoRef = useRef(null);
   const controlsRef = useRef(null);
   const validationInProgressRef = useRef(false);
+  const scanPausedRef = useRef(false);
+  const statsInFlightRef = useRef(false);
+  const previousConnectionStateRef = useRef("checking");
+  const validationRef = useRef(validation);
+  validationRef.current = validation;
 
   const loadDashboard = useCallback(async () => {
     const client = requireSupabase();
@@ -69,7 +87,34 @@ export default function CollaboratorDashboard({ onNavigate }) {
     if (eventsError) throw eventsError;
     setProfile(account);
     setAssignedEvents(events ?? []);
+    setSelectedEventId((current) => eventIds.includes(current) ? current : eventIds[0] ?? "");
+    setConnectionState("online");
+    setLastSync(new Date());
+    setMessage("");
   }, [onNavigate]);
+
+  const refreshStats = useCallback(async () => {
+    if (!selectedEventId || statsInFlightRef.current) return;
+    if (!navigator.onLine) {
+      setConnectionState("offline");
+      return;
+    }
+    statsInFlightRef.current = true;
+    const startedAt = performance.now();
+    try {
+      const { data, error } = await requireSupabase().rpc("get_validation_dashboard", { p_event_id: selectedEventId });
+      if (error) throw error;
+      setDashboardData(data);
+      setConnectionState("online");
+      setServerLatency(Math.round(performance.now() - startedAt));
+      setLastSync(new Date());
+    } catch (error) {
+      console.error("No se pudieron actualizar las estadísticas del evento.", error);
+      setConnectionState(navigator.onLine ? "unstable" : "offline");
+    } finally {
+      statsInFlightRef.current = false;
+    }
+  }, [selectedEventId]);
 
   useEffect(() => {
     document.title = "Validación de entradas — TickEven.cl";
@@ -77,7 +122,10 @@ export default function CollaboratorDashboard({ onNavigate }) {
     loadDashboard()
       .catch((loadError) => {
         console.error("No se pudo cargar el panel del colaborador.", loadError);
-        if (active) setMessage(loadError.message || "No se pudo cargar la información del colaborador.");
+        if (active) {
+          setMessage("No se pudo cargar la información del colaborador. Reintentando conexión automáticamente.");
+          setConnectionState(navigator.onLine ? "unstable" : "offline");
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -92,21 +140,96 @@ export default function CollaboratorDashboard({ onNavigate }) {
     };
   }, [loadDashboard, onNavigate]);
 
+  useEffect(() => {
+    const handleOffline = () => setConnectionState("offline");
+    const handleOnline = () => {
+      if (selectedEventId) {
+        void refreshStats();
+        return;
+      }
+      void loadDashboard().catch((loadError) => {
+        console.error("No se pudo reconectar el panel del colaborador.", loadError);
+        setConnectionState("unstable");
+        setMessage("No se pudo recuperar la información del colaborador. Reintenta la conexión.");
+      });
+    };
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [loadDashboard, refreshStats, selectedEventId]);
+
+  useEffect(() => {
+    if (profile || !["offline", "unstable"].includes(connectionState)) return undefined;
+    const intervalId = window.setInterval(() => {
+      void loadDashboard().catch((loadError) => {
+        console.error("No se pudo reintentar la conexión del colaborador.", loadError);
+        setConnectionState(navigator.onLine ? "unstable" : "offline");
+      });
+    }, 10000);
+    return () => window.clearInterval(intervalId);
+  }, [connectionState, loadDashboard, profile]);
+
+  useEffect(() => {
+    if (
+      connectionState === "online"
+      && ["offline", "unstable"].includes(previousConnectionStateRef.current)
+    ) {
+      setConnectionRestored(true);
+      if (["connection_unavailable", "server_error"].includes(validationRef.current?.reason)) {
+        setValidation(null);
+        setMessage("");
+        scanPausedRef.current = false;
+      }
+    }
+    previousConnectionStateRef.current = connectionState;
+  }, [connectionState]);
+
+  useEffect(() => {
+    if (!connectionRestored) return undefined;
+    const timeoutId = window.setTimeout(() => setConnectionRestored(false), 3500);
+    return () => window.clearTimeout(timeoutId);
+  }, [connectionRestored]);
+
+  useEffect(() => {
+    if (!selectedEventId) return undefined;
+    void refreshStats();
+    const intervalId = window.setInterval(() => void refreshStats(), 10000);
+    return () => window.clearInterval(intervalId);
+  }, [selectedEventId, refreshStats]);
+
   const stopCamera = () => {
     controlsRef.current?.stop();
     controlsRef.current = null;
     setCameraState("idle");
   };
 
-  const validate = async (credentials) => {
-    if (validationInProgressRef.current) return;
+  const validate = async (credentials, inputMethod, invalidQrMessage = "") => {
+    if (validationInProgressRef.current || scanPausedRef.current) return;
+    if (!selectedEventId) {
+      setMessage("Selecciona un evento asignado antes de validar.");
+      return;
+    }
     validationInProgressRef.current = true;
+    scanPausedRef.current = true;
     setBusy(true);
     setValidation(null);
     setMessage("");
     setSecurityCode("");
+    if (!navigator.onLine) {
+      setConnectionState("offline");
+      setValidation({ valid: false, reason: "connection_unavailable", message: "VALIDACIÓN NO DISPONIBLE. VERIFIQUE SU CONEXIÓN." });
+      validationInProgressRef.current = false;
+      setBusy(false);
+      return;
+    }
     try {
-      const { data, error } = await requireSupabase().functions.invoke("validate-ticket", { body: credentials });
+      const requestStartedAt = performance.now();
+      const { data, error } = await requireSupabase().functions.invoke("validate-ticket", {
+        body: { ...credentials, event_id: selectedEventId, input_method: inputMethod },
+      });
       if (error) {
         let code;
         try {
@@ -114,17 +237,29 @@ export default function CollaboratorDashboard({ onNavigate }) {
         } catch (parseError) {
           console.error("No se pudo leer la respuesta de validación.", parseError);
         }
-        throw new Error(validationMessages[code] || error.message || "No se pudo validar la entrada.");
+        const requestError = new Error(validationMessages[code] || error.message || "No se pudo validar la entrada.");
+        requestError.code = code || (error.context ? "server_error" : "connection_unavailable");
+        throw requestError;
       }
-      if (!data?.valid) {
-        setMessage(validationMessages[data?.reason] || "La entrada no pudo validarse.");
-        return;
+      if (!data || typeof data.valid !== "boolean") {
+        throw new Error("El servidor no devolvió una confirmación válida para esta entrada.");
       }
-      setValidation(data);
-      stopCamera();
+      setValidation(invalidQrMessage && !data.valid ? { ...data, message: invalidQrMessage } : data);
+      setConnectionState("online");
+      setServerLatency(Math.round(performance.now() - requestStartedAt));
+      setLastSync(new Date());
+      void refreshStats();
     } catch (validationError) {
       console.error("No se pudo validar la entrada.", validationError);
-      setMessage(validationError.message || "No se pudo validar la entrada. Inténtalo otra vez.");
+      const connectionUnavailable = !navigator.onLine || validationError.code === "connection_unavailable";
+      setConnectionState(navigator.onLine ? "unstable" : "offline");
+      setValidation({
+        valid: false,
+        reason: connectionUnavailable ? "connection_unavailable" : "server_error",
+        message: connectionUnavailable
+          ? "VALIDACIÓN NO DISPONIBLE. VERIFIQUE SU CONEXIÓN."
+          : validationError.message || "No se pudo confirmar la entrada con el servidor.",
+      });
     } finally {
       validationInProgressRef.current = false;
       setBusy(false);
@@ -134,24 +269,29 @@ export default function CollaboratorDashboard({ onNavigate }) {
   const startCamera = async () => {
     setMessage("");
     setValidation(null);
+    if (!selectedEventId) {
+      setMessage("Selecciona un evento asignado antes de iniciar el escáner.");
+      return;
+    }
+    if (controlsRef.current) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       setMessage("Este navegador no permite usar la cámara. Usa el código de seguridad de la entrada.");
       return;
     }
+    scanPausedRef.current = false;
     setCameraState("starting");
     try {
       const reader = new BrowserMultiFormatReader();
       controlsRef.current = await reader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
-        if (!result || validationInProgressRef.current) return;
-        stopCamera();
+        if (!result || validationInProgressRef.current || scanPausedRef.current) return;
         let credentials;
         try {
           credentials = readQrPayload(result.getText());
         } catch (qrError) {
-          setMessage(qrError.message);
+          void validate({ qr_token: "invalid-qr-format" }, "qr", qrError.message);
           return;
         }
-        void validate(credentials);
+        void validate(credentials, "qr");
       });
       setCameraState("scanning");
     } catch (cameraError) {
@@ -170,7 +310,15 @@ export default function CollaboratorDashboard({ onNavigate }) {
       setMessage("Ingresa el código de seguridad de la entrada.");
       return;
     }
-    void validate({ security_code: code });
+    void validate({ security_code: code }, "manual");
+  };
+
+  const continueScanning = () => {
+    setValidation(null);
+    setMessage("");
+    setSecurityCode("");
+    scanPausedRef.current = false;
+    if (!controlsRef.current) void startCamera();
   };
 
   const signOut = async () => {
@@ -186,6 +334,29 @@ export default function CollaboratorDashboard({ onNavigate }) {
 
   if (loading) return <main className="producer-dashboard-loading">Conectando con Supabase…</main>;
 
+  const activeEvent = assignedEvents.find((event) => event.id === selectedEventId);
+  const resultKind = validation?.valid
+    ? "authorized"
+    : validation?.reason === "already_used"
+      ? "used"
+      : validation?.reason === "other_event"
+        ? "warning"
+        : ["connection_unavailable", "server_error"].includes(validation?.reason)
+          ? "unavailable"
+          : "rejected";
+  const connectionLabels = {
+    checking: "Comprobando servidor",
+    online: "Servidor conectado",
+    unstable: "Conexión inestable",
+    offline: "Sin conexión con servidor",
+  };
+  const historyLabels = {
+    authorized: "Acceso autorizado",
+    already_used: "Ya utilizada",
+    invalid: "No válida",
+    other_event: "Otro evento",
+  };
+
   return (
     <div className="producer-dashboard collaborator-dashboard">
       <aside className="producer-dashboard-sidebar">
@@ -197,49 +368,99 @@ export default function CollaboratorDashboard({ onNavigate }) {
         <div className="producer-dashboard-sidebar__account"><span>{profile?.full_name?.slice(0, 1).toUpperCase() || "C"}</span><div><strong>{profile?.full_name || "Colaborador"}</strong><small>Acceso aprobado</small></div><button type="button" aria-label="Cerrar sesión" onClick={signOut}><LogOut size={16} /></button></div>
       </aside>
       <main className="producer-dashboard-main">
-        <header className="producer-dashboard-topbar">
-          <div><span>COLABORADORES</span><strong>Validación de entradas</strong></div>
-          <button type="button" onClick={() => { setLoading(true); loadDashboard().catch((loadError) => setMessage(loadError.message)).finally(() => setLoading(false)); }}><RefreshCw size={14} /> Actualizar</button>
-        </header>
-        <section className="staff-validator">
-          <div className="staff-validator__intro">
-            <span className="producer-dashboard-kicker">CONTROL DE ACCESO</span>
-            <h1>Valida una entrada<span>.</span></h1>
-            <p>Escanea el QR con la cámara o ingresa el código de seguridad si no se puede leer.</p>
-            <div className="staff-validator__event-list">
-              <strong>Eventos asignados</strong>
-              {assignedEvents.length ? assignedEvents.map((event) => <span key={event.id}><Ticket size={14} /> {event.title}</span>) : <span>Aún no tienes eventos asignados. Contacta al administrador.</span>}
-            </div>
+        <header className="producer-dashboard-topbar access-topbar">
+          <div><span>CONTROL DE ACCESO</span><strong>{activeEvent?.title || "Selecciona un evento asignado"}</strong></div>
+          <div className="access-topbar__status-group">
+            <span className={`access-status access-status--${connectionState}`}><i />{connectionLabels[connectionState]}</span>
+            <span className={`access-status access-status--${cameraState === "scanning" ? "online" : "idle"}`}><Camera size={13} />{cameraState === "scanning" ? "Cámara activa" : cameraState === "starting" ? "Iniciando cámara" : "Cámara apagada"}</span>
+            <button type="button" onClick={() => void refreshStats()}><RefreshCw size={14} /> Sincronizar</button>
           </div>
-          <section className="staff-validator__panel" aria-label="Validación de entradas">
-            <div className="staff-validator__camera">
-              <video ref={videoRef} muted playsInline aria-label="Vista de la cámara para escanear el código QR" />
-              {cameraState !== "scanning" && <div className="staff-validator__camera-placeholder"><Camera size={30} /><span>{cameraState === "starting" ? "Iniciando cámara…" : "La cámara está apagada"}</span></div>}
-              {cameraState === "scanning" && <span className="staff-validator__scan-guide" aria-hidden="true" />}
+        </header>
+        <section className="access-dashboard">
+          <div className="access-toolbar">
+            <div>
+              <span className="access-kicker">VALIDADOR DE ENTRADAS</span>
+              <h1>Control de acceso<span>.</span></h1>
+              <p>{profile?.full_name || "Colaborador"}<i />{activeEvent?.venue || "Evento asignado"}{activeEvent?.city ? ` · ${activeEvent.city}` : ""}</p>
             </div>
-            <div className="staff-validator__camera-actions">
-              {cameraState === "scanning"
-                ? <button className="is-secondary" type="button" onClick={stopCamera}>Detener cámara</button>
-                : <button type="button" onClick={startCamera} disabled={cameraState === "starting"}><Camera size={16} /> {cameraState === "starting" ? "Iniciando…" : "Escanear código QR"}</button>}
-            </div>
-            <div className="staff-validator__divider"><span>O ingresa el código manualmente</span></div>
-            <form className="staff-validator__code-form" onSubmit={submitSecurityCode}>
-              <label htmlFor="ticket-security-code">Código de seguridad</label>
-              <div><input id="ticket-security-code" value={securityCode} onChange={(event) => setSecurityCode(event.target.value)} autoComplete="off" maxLength={40} placeholder="Ingresa el código de la entrada" /><button type="submit" disabled={busy || !securityCode.trim()}>{busy ? "Validando…" : "Validar"}</button></div>
-            </form>
-            {message && <p className="staff-validator__message" role="alert"><CircleAlert size={16} />{message}</p>}
-            {validation && <article className="staff-validator__success" role="status">
-              <span><Check size={18} /> Entrada validada</span>
-              <dl>
-                <div><dt>Asistente</dt><dd>{validation.attendee_name}</dd></div>
-                <div><dt>RUT</dt><dd>{validation.attendee_rut}</dd></div>
-                <div><dt>Tipo de entrada</dt><dd>{validation.ticket_type}</dd></div>
-                <div><dt>Evento</dt><dd>{validation.event_title}</dd></div>
-              </dl>
-              <button type="button" onClick={() => { setValidation(null); setMessage(""); }}>Validar otra entrada</button>
-            </article>}
-          </section>
-          <aside className="staff-validator__privacy"><ShieldCheck size={16} /><span>Los datos del titular solo aparecen cuando una entrada válida se confirma. Cada ticket se puede validar una sola vez.</span></aside>
+            <label className="access-event-select">Evento activo
+              <select value={selectedEventId} disabled={!assignedEvents.length || cameraState !== "idle" || busy || Boolean(validation)} onChange={(event) => { setSelectedEventId(event.target.value); setDashboardData(null); setValidation(null); scanPausedRef.current = false; }}>
+                {!assignedEvents.length && <option value="">Sin eventos asignados</option>}
+                {assignedEvents.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <div className={`access-connection-banner access-connection-banner--${connectionState}`} role="status" aria-live="polite">
+            {connectionState === "offline" ? <WifiOff size={17} /> : connectionState === "online" ? <Wifi size={17} /> : <TriangleAlert size={17} />}
+            <div><strong>{connectionState === "offline" ? "SIN CONEXIÓN CON EL SERVIDOR" : connectionState === "unstable" ? "CONEXIÓN INESTABLE" : connectionState === "online" ? "SERVIDOR OPERATIVO" : "VERIFICANDO CONEXIÓN"}</strong><span>{connectionState === "offline" ? "No es posible confirmar la validez de las entradas. Ninguna entrada recibirá autorización sin respuesta del servidor." : connectionState === "unstable" ? "El servidor presenta errores. El sistema no autoriza accesos sin confirmación." : connectionState === "online" ? `Última sincronización ${lastSync ? formatDateTime(lastSync) : "ahora"}${serverLatency !== null ? ` · ${serverLatency} ms` : ""}` : "Comprobando conexión segura con el servidor."}</span></div>
+            {connectionState === "online" && <span className="access-connection-banner__dot" />}
+          </div>
+          {connectionRestored && <div className="access-reconnected" role="status" aria-live="polite"><Wifi size={15} /> CONEXIÓN RESTABLECIDA · Validador listo para continuar.</div>}
+
+          {!assignedEvents.length ? (
+            <div className="access-empty"><Ticket size={24} /><strong>{connectionState === "online" ? "Sin eventos asignados" : "No se pudo conectar con el servidor"}</strong><span>{connectionState === "online" ? "Solicita al administrador que te asigne un evento para habilitar el validador." : message || "Reintentando conexión automáticamente…"}</span>{connectionState !== "online" && <button className="access-button access-button--secondary" type="button" onClick={() => void loadDashboard().catch((loadError) => { console.error("No se pudo reintentar la conexión del colaborador.", loadError); setConnectionState(navigator.onLine ? "unstable" : "offline"); setMessage("No se pudo recuperar la información del colaborador. Reintenta la conexión."); })}><RefreshCw size={15} /> Reintentar conexión</button>}</div>
+          ) : (
+            <>
+              <div className="access-workbench">
+                <section className="access-scanner" aria-label="Escáner de entradas">
+                  <div className="access-scanner__heading"><div><span>ESCÁNER QR</span><strong>{cameraState === "scanning" ? "Listo para validar" : "Activa la cámara para comenzar"}</strong></div><span className={`access-scanner__ready${cameraState === "scanning" && !validation ? " is-ready" : ""}`}><i />{validation ? "Resultado" : cameraState === "scanning" ? "Preparado" : "En espera"}</span></div>
+                  <div className={`access-scanner__viewport${cameraState === "scanning" ? " is-scanning" : ""}`}>
+                    <video ref={videoRef} muted playsInline aria-label="Vista de cámara para escanear entradas" />
+                    {cameraState !== "scanning" && <div className="access-camera-placeholder"><Camera size={34} /><strong>{cameraState === "starting" ? "Abriendo cámara…" : "Cámara desactivada"}</strong><span>Centra el código QR dentro del marco.</span></div>}
+                    {cameraState === "scanning" && !validation && <div className="access-scan-frame" aria-hidden="true"><i /><i /><i /><i /><span>ENCUADRA EL CÓDIGO QR</span></div>}
+                    {validation && <article className={`access-result access-result--${resultKind}`} role="alert" aria-live="assertive">
+                      <div className="access-result__icon">{resultKind === "authorized" ? <Check size={34} strokeWidth={3} /> : resultKind === "used" || resultKind === "rejected" ? <CircleX size={34} strokeWidth={2.5} /> : <TriangleAlert size={34} strokeWidth={2.5} />}</div>
+                      <span className="access-result__eyebrow">{activeEvent?.title || "Evento"}</span>
+                      <h2>{resultKind === "authorized" ? "¡ACCESO AUTORIZADO!" : resultKind === "used" ? "ENTRADA YA VALIDADA" : resultKind === "warning" ? "ENTRADA DE OTRO EVENTO" : resultKind === "unavailable" ? "VALIDACIÓN NO DISPONIBLE" : "ENTRADA NO VÁLIDA"}</h2>
+                      <p className="access-result__summary">{validation.message || validationMessages[validation.reason] || (validation.valid ? "Entrada confirmada por el servidor." : "El servidor no pudo autorizar esta entrada.")}</p>
+                      {(validation.event_title || validation.attendee_name || validation.ticket_type || validation.ticket_id) && <dl className="access-result__details">
+                        {validation.attendee_name && <div><dt>Titular</dt><dd>{validation.attendee_name}</dd></div>}
+                        {validation.attendee_rut && <div><dt>RUT</dt><dd>{validation.attendee_rut}</dd></div>}
+                        {validation.event_title && <div><dt>{resultKind === "warning" ? "Evento de la entrada" : "Evento"}</dt><dd>{validation.event_title}</dd></div>}
+                        {validation.ticket_type && <div><dt>Tipo de entrada</dt><dd>{validation.ticket_type}</dd></div>}
+                        {validation.ticket_id && <div><dt>Entrada</dt><dd>…{String(validation.ticket_id).slice(-8).toUpperCase()}</dd></div>}
+                        {validation.checked_in_at && <div><dt>Primera validación</dt><dd>{formatDateTime(validation.checked_in_at)}</dd></div>}
+                        {validation.checked_in_by && <div><dt>Validada por</dt><dd>{validation.checked_in_by === profile?.id ? profile?.full_name : validation.checked_in_by}</dd></div>}
+                        {validation.valid && <div><dt>Validada ahora</dt><dd>{formatDateTime(validation.checked_in_at)}</dd></div>}
+                      </dl>}
+                      <button className="access-result__next" type="button" onClick={continueScanning}><Check size={18} /> OK - SIGUIENTE ENTRADA</button>
+                    </article>}
+                  </div>
+                  <div className="access-scanner__controls">
+                    {cameraState === "scanning"
+                      ? <button className="access-button access-button--secondary" type="button" onClick={stopCamera}><Camera size={17} /> Desactivar cámara</button>
+                      : <button className="access-button access-button--primary" type="button" onClick={() => void startCamera()} disabled={cameraState === "starting" || !selectedEventId}><Camera size={17} /> {cameraState === "starting" ? "Iniciando cámara…" : "Activar cámara"}</button>}
+                    <span><ScanLine size={15} />{cameraState === "scanning" ? "La cámara permanece activa entre lecturas" : "Se requiere cámara y conexión segura"}</span>
+                  </div>
+                  <div className="access-manual">
+                    <div className="access-manual__title"><CircleAlert size={17} /><div><strong>¿Problemas con el código QR?</strong><span>Ingresa el código impreso en la entrada.</span></div></div>
+                    <form onSubmit={submitSecurityCode}>
+                      <input aria-label="Código de seguridad de la entrada" inputMode="text" autoComplete="off" autoCapitalize="characters" maxLength={40} value={securityCode} onChange={(event) => setSecurityCode(event.target.value.toUpperCase())} placeholder="CÓDIGO DE ENTRADA" disabled={busy || Boolean(validation)} />
+                      <button type="submit" disabled={busy || Boolean(validation) || !securityCode.trim() || !selectedEventId}>{busy ? "Validando…" : "VALIDAR ENTRADA"}</button>
+                    </form>
+                  </div>
+                  {message && <p className="access-inline-message" role="alert"><CircleAlert size={15} />{message}</p>}
+                </section>
+
+                <aside className="access-side-panel">
+                  <section className="access-event-card"><span className="access-kicker">EVENTO ACTIVO</span><h2>{activeEvent?.title || "Selecciona un evento"}</h2><p>{activeEvent?.venue || ""}{activeEvent?.city ? ` · ${activeEvent.city}` : ""}</p>{activeEvent?.starts_at && <span className="access-event-card__date"><Clock3 size={14} />{formatDateTime(activeEvent.starts_at)}</span>}</section>
+                  <section className="access-stats"><div className="access-section-heading"><span className="access-kicker">ESTADÍSTICAS DEL EVENTO</span><span>{dashboardData ? "EN VIVO · 10 S" : "SIN SINCRONIZAR"}</span></div><div className="access-stats__grid">
+                    <article><span>Entradas vendidas</span><strong>{dashboardData?.stats?.sold ?? "—"}</strong><small>Total emitidas</small></article>
+                    <article className="is-success"><span>Entradas validadas</span><strong>{dashboardData?.stats?.validated ?? "—"}</strong><small>Accesos confirmados</small></article>
+                    <article><span>Pendientes</span><strong>{dashboardData?.stats?.pending ?? "—"}</strong><small>Sin utilizar</small></article>
+                    <article><span>Porcentaje de acceso</span><strong>{dashboardData ? `${dashboardData.stats.percent}%` : "—"}</strong><small>Del total vendido</small></article>
+                  </div></section>
+                  <section className="access-activity"><div className="access-section-heading"><span className="access-kicker">MI ACTIVIDAD</span><span>{profile?.full_name}</span></div><div className="access-activity__rows"><div><span>Validaciones procesadas</span><strong>{dashboardData?.activity?.attempts ?? "—"}</strong></div><div><span>Accesos autorizados</span><strong>{dashboardData?.activity?.authorized ?? "—"}</strong></div><div><span>Entradas ya utilizadas</span><strong>{dashboardData?.activity?.already_used ?? "—"}</strong></div><div><span>Último acceso autorizado</span><strong>{dashboardData?.activity?.last_attendee || "Sin registros"}</strong></div><div><span>Hora de última autorización</span><strong>{formatDateTime(dashboardData?.activity?.last_validation)}</strong></div></div></section>
+                </aside>
+              </div>
+
+              <section className="access-history"><div className="access-section-heading"><div><span className="access-kicker">HISTORIAL</span><h2>Últimas entradas procesadas</h2></div><span>{dashboardData?.history?.length ?? 0} registros</span></div>
+                {dashboardData?.history?.length ? <div className="access-history__table"><div className="access-history__head"><span>TITULAR</span><span>RUT</span><span>TIPO</span><span>HORA</span><span>RESULTADO</span></div>{dashboardData.history.map((item) => <article key={item.id}><strong>{item.attendee_name}</strong><span>{item.attendee_rut || "—"}</span><span>{item.ticket_type || "—"}</span><span>{formatDateTime(item.attempted_at)}</span><span className={`access-history__result access-history__result--${item.outcome}`}><i />{historyLabels[item.outcome] || item.outcome}</span></article>)}</div> : <div className="access-history__empty">Las validaciones de este evento aparecerán aquí.</div>}
+              </section>
+            </>
+          )}
+          <aside className="access-security-note"><ShieldCheck size={16} /><span>Las entradas se verifican en el servidor. Sin confirmación no se autoriza el acceso; cada entrada admite un solo ingreso.</span></aside>
         </section>
         <footer className="producer-dashboard-footer"><span>Si no tienes acceso a un evento, solicita la asignación al administrador.</span><a href="/">Volver al sitio <Ticket size={13} /></a></footer>
       </main>

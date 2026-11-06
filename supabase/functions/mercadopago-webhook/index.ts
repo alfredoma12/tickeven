@@ -82,7 +82,7 @@ Deno.serve(async (request: Request) => {
     ? payload.data as Record<string, unknown>
     : {};
   const url = new URL(request.url);
-  const paymentId = String(data.id ?? url.searchParams.get("data.id") ?? "");
+  const paymentId = String(url.searchParams.get("data.id") ?? "");
   if (!/^\d{1,30}$/.test(paymentId)) return jsonResponse(400, { error: "invalid_payment_id" });
   if (!await verifySignature(request, paymentId, signatureSecret)) {
     return jsonResponse(401, { error: "invalid_signature" });

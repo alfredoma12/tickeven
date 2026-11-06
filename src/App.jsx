@@ -380,7 +380,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
           .includes(query);
       return matchesCategory && matchesCity && matchesSearch;
     });
-  }, [category, city, search]);
+  }, [events, category, city, search]);
 
   const weekendEvents = events.filter((event) => event.weekend);
   const featuredEvents = events.filter((event) => !event.weekend);
@@ -624,11 +624,6 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
                 <span>tickeven<span className="brand__dot">.</span>cl</span>
               </a>
               <p>La vida pasa fuera<br />de la pantalla.</p>
-              <div className="footer-socials" aria-label="Redes sociales">
-                <a href="https://instagram.com" aria-label="Instagram">ig</a>
-                <a href="https://tiktok.com" aria-label="TikTok">tk</a>
-                <a href="https://facebook.com" aria-label="Facebook">fb</a>
-              </div>
             </div>
             <div className="footer-links">
               <div><h3>EXPLORA</h3><a href="#eventos">Eventos</a><a href="#weekend-title">Este fin de semana</a><a href="#upcoming-title">Próximamente</a></div>

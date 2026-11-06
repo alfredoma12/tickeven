@@ -43,7 +43,12 @@ Deno.serve(async (request: Request) => {
   const ticketId = typeof payload.ticket_id === "string" ? payload.ticket_id : null;
   const qrToken = typeof payload.qr_token === "string" ? payload.qr_token : null;
   const securityCode = typeof payload.security_code === "string" ? payload.security_code : null;
-  if ((!ticketId || !qrToken) && !securityCode) {
+  const eventId = typeof payload.event_id === "string" ? payload.event_id : "";
+  const inputMethod = typeof payload.input_method === "string" ? payload.input_method : "";
+  if (!eventId || eventId.length > 100 || !["qr", "manual"].includes(inputMethod)) {
+    return jsonResponse(400, { error: "event_and_input_method_required" }, appOrigin);
+  }
+  if ((!ticketId || !qrToken) && !securityCode && !(inputMethod === "qr" && qrToken)) {
     return jsonResponse(400, { error: "ticket_credentials_required" }, appOrigin);
   }
   if (ticketId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(ticketId)) {
@@ -61,6 +66,8 @@ Deno.serve(async (request: Request) => {
     p_ticket_id: ticketId,
     p_qr_token: qrToken,
     p_security_code: securityCode,
+    p_event_id: eventId,
+    p_input_method: inputMethod,
   });
   if (error) {
     console.error("validate_ticket failed", error.message);

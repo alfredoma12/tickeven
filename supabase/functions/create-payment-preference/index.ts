@@ -37,8 +37,12 @@ Deno.serve(async (request: Request) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const accessToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
+  const checkoutMode = Deno.env.get("MERCADOPAGO_CHECKOUT_MODE");
   const appPublicUrl = Deno.env.get("APP_PUBLIC_URL")?.replace(/\/+$/, "");
-  if (!supabaseUrl || !serviceRoleKey || !accessToken || !appPublicUrl) {
+  if (
+    !supabaseUrl || !serviceRoleKey || !accessToken || !appPublicUrl ||
+    !["test", "production"].includes(checkoutMode ?? "")
+  ) {
     console.error("Mercado Pago preference configuration is incomplete.");
     return jsonResponse(500, { error: "payment_not_configured" });
   }
@@ -117,9 +121,8 @@ Deno.serve(async (request: Request) => {
     console.error("Mercado Pago rejected the preference.", preferenceResponse.status, preference?.message);
     return jsonResponse(502, { error: "payment_preference_failed" });
   }
-  const sandbox = accessToken.startsWith("TEST-");
-  const checkoutUrl = sandbox
-    ? preference.sandbox_init_point ?? preference.init_point
+  const checkoutUrl = checkoutMode === "test"
+    ? preference.sandbox_init_point
     : preference.init_point;
   if (typeof checkoutUrl !== "string" || !checkoutUrl.startsWith("https://")) {
     console.error("Mercado Pago returned an invalid checkout URL.");

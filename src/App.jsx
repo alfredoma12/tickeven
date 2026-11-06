@@ -629,6 +629,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
               <div><h3>EXPLORA</h3><a href="#eventos">Eventos</a><a href="#weekend-title">Este fin de semana</a><a href="#upcoming-title">Próximamente</a></div>
               <div><h3>AYUDA</h3><a href="#ayuda">Preguntas frecuentes</a><a href="#contacto">Contacto soporte</a><a href="#comprar">¿Cómo comprar?</a></div>
               <div><h3>PARA PRODUCTORES</h3><a href="/productores" target="_blank" rel="noreferrer">Conoce la plataforma</a><a href="/productores#producer-faq" target="_blank" rel="noreferrer">Preguntas frecuentes</a></div>
+              <div><h3>ACCESO A PORTALES</h3><a href={getBrowserPath("/admin/login")}>Portal administrador</a><a href={getBrowserPath("/colaboradores/login")}>Portal colaboradores</a></div>
               <div><h3>TICKEVEN.CL</h3><a href="#nosotros">Sobre nosotros</a><a href="#terminos">Términos y condiciones</a><a href="#privacidad">Política de privacidad</a></div>
             </div>
           </div>
@@ -747,8 +748,10 @@ function App() {
   if (path === "/productores/dashboard") {
     return <ProducerDashboard onPublish={handlePublishEvent} onNavigate={navigate} />;
   }
+  if (path === "/admin") return <ProducerAuthPage accountType="admin" onNavigate={navigate} />;
   if (path === "/admin/login") return <ProducerAuthPage accountType="admin" onNavigate={navigate} />;
   if (path === "/admin/dashboard") return <AdminDashboard onNavigate={navigate} />;
+  if (path === "/colaboradores") return <ProducerAuthPage accountType="collaborator" onNavigate={navigate} />;
   if (path === "/colaboradores/login") return <ProducerAuthPage accountType="collaborator" onNavigate={navigate} />;
   if (path === "/colaboradores/dashboard") {
     return <Suspense fallback={<main className="producer-dashboard-loading">Cargando validador de entradas…</main>}><CollaboratorDashboard onNavigate={navigate} /></Suspense>;

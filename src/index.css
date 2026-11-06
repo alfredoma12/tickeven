@@ -191,7 +191,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .brand--footer { font-size: 21px; }
 .brand--footer .brand__mark { width: 31px; height: 31px; }
 .footer-brand > p { margin: 18px 0 15px; color: #b9bcb2; font-size: 12px; line-height: 1.7; }
-.footer-links { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 26px; flex: 1; max-width: 780px; }
+.footer-links { display: grid; grid-template-columns: repeat(5, minmax(110px, 1fr)); gap: 26px; flex: 1; max-width: 780px; }
 .footer-links > div { display: flex; flex-direction: column; gap: 11px; }
 .footer-links h3 { margin: 4px 0 6px; color: #adb1a4; font-size: 8px; letter-spacing: 1px; }
 .footer-links a { color: #e4e6de; font-size: 10px; transition: color .2s; }

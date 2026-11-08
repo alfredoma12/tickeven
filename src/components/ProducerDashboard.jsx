@@ -20,6 +20,7 @@ import { fetchProducerEvents } from "../data/events.js";
 import { endProducerSession } from "../data/producerPortal.js";
 import { requireSupabase } from "../data/supabase.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "../data/pricing.js";
+import { createUUID } from "../data/site.js";
 import Brand from "./Brand.jsx";
 
 const categories = ["Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
@@ -393,7 +394,7 @@ function ProductManagementTab({ events }) {
       if (product.imageFile) {
         const prepared = await optimizeImage(product.imageFile);
         previewUrl = prepared.preview;
-        const imagePath = `${userData.user.id}/${eventId}/products/${product.id ?? crypto.randomUUID()}.jpg`;
+        const imagePath = `${userData.user.id}/${eventId}/products/${product.id ?? createUUID()}.jpg`;
         const { error: uploadError } = await client.storage.from("event-media")
           .upload(imagePath, prepared.blob, { contentType: "image/jpeg", upsert: true });
         if (uploadError) throw uploadError;

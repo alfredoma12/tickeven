@@ -63,6 +63,13 @@ npx supabase functions deploy get-order-tickets
    | CNAME | `www` | `alfredoma12.github.io` |
 
    GitHub Pages debe tener `tickeven.cl` como Custom domain; con ambos hosts configurados, Pages redirige `www` al dominio canónico. Espera la propagación DNS, verifica el dominio en Settings → Pages y activa **Enforce HTTPS** cuando el certificado esté disponible.
+6. Para evitar respuestas HTTP `404` al abrir o recargar rutas como `/colaboradores/login`, crea en Cloudflare una regla **Rules → Transform Rules → URL Rewrite** para el host `tickeven.cl`:
+
+   - Expresión: `http.host eq "tickeven.cl" and http.request.uri.path ne "/" and not starts_with(http.request.uri.path, "/assets/") and http.request.uri.path ne "/favicon.svg" and http.request.uri.path ne "/robots.txt" and http.request.uri.path ne "/sitemap.xml" and http.request.uri.path ne "/CNAME" and http.request.uri.path ne "/404.html"`
+   - Reescribe la ruta a `/index.html` y conserva la query string.
+
+   Así Cloudflare entrega el shell de la SPA con HTTP 200 para rutas internas, sin alterar la ruta que ve el navegador. El fallback `404.html` del workflow permanece como respaldo si se accede a GitHub Pages sin pasar por esta regla.
+7. El dominio usa Cloudflare y la página carga un beacon opcional de Browser Insights. Si el navegador no puede resolver `static.cloudflareinsights.com`, desactiva Browser Insights/Web Analytics en Cloudflare o permite ese host en el DNS/red del navegador; ese fallo no corresponde a una API ni bloquea el funcionamiento de TickEven.
 
 ## Alcance del flujo conectado
 

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { PurchaseSummary } from "./CartPage.jsx";
 import { ADMINISTRATION_PERCENTAGE } from "../data/pricing.js";
+import { createUUID } from "../data/site.js";
 import { createMercadoPagoPreference, createPendingOrder, getPaidOrderTickets } from "../data/supabase.js";
 
 const money = new Intl.NumberFormat("es-CL");
@@ -17,7 +18,7 @@ const money = new Intl.NumberFormat("es-CL");
 export default function CheckoutPage({ lines, totals }) {
   const [checkoutError, setCheckoutError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [checkoutKey] = useState(() => crypto.randomUUID());
+  const [checkoutKey] = useState(createUUID);
   const [paymentTickets, setPaymentTickets] = useState([]);
   const [paymentProducts, setPaymentProducts] = useState([]);
   const [paymentLoading, setPaymentLoading] = useState(false);

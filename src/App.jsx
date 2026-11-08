@@ -27,7 +27,7 @@ import Brand from "./components/Brand.jsx";
 import { getCartLines, getCartProductLines, getCartTotals } from "./data/cart.js";
 import { fetchPublishedEvents, publishProducerEvent } from "./data/events.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "./data/pricing.js";
-import { APP_URL } from "./data/site.js";
+import { APP_URL, createUUID } from "./data/site.js";
 import { registerFreeOrder } from "./data/supabase.js";
 
 const categories = ["Todos", "Conciertos", "Fiestas", "Festivales", "Experiencias", "Teatro", "Deportes", "Familia", "Conferencias"];
@@ -466,9 +466,6 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
               <ChevronDown size={14} aria-hidden="true" />
             </label>
             <div className="navigation__actions">
-              <a className="login-button" href="/productores/login">
-                Iniciar sesión
-              </a>
               <a className="navigation__publish" href="/productores">
                 Publicar evento <ArrowUpRight size={15} />
               </a>
@@ -641,13 +638,13 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
               <div><h3>EXPLORA</h3><a href="#eventos">Eventos</a><a href="#weekend-title">Este fin de semana</a><a href="#upcoming-title">Próximamente</a></div>
               <div><h3>AYUDA</h3><a href="#ayuda">Preguntas frecuentes</a><a href="#contacto">Contacto soporte</a><a href="#comprar">¿Cómo comprar?</a></div>
               <div><h3>PARA PRODUCTORES</h3><a href="/productores" target="_blank" rel="noreferrer">Conoce la plataforma</a><a href="/productores#producer-faq" target="_blank" rel="noreferrer">Preguntas frecuentes</a></div>
-              <div><h3>ACCESO A PORTALES</h3><a href={getBrowserPath("/admin/login")}>Portal administrador</a><a href={getBrowserPath("/colaboradores/login")}>Portal colaboradores</a></div>
+              <div><h3>ACCESO A PORTALES</h3><a href={getBrowserPath("/productores/login")}>Iniciar sesión productores</a><a href={getBrowserPath("/admin/login")}>Portal administrador</a><a href={getBrowserPath("/colaboradores/login")}>Portal colaboradores</a></div>
               <div><h3>TICKEVEN.CL</h3><a href="#nosotros">Sobre nosotros</a><a href="#terminos">Términos y condiciones</a><a href="#privacidad">Política de privacidad</a></div>
             </div>
           </div>
           <div className="footer-bottom">
             <span>© 2026 TickEven.cl. Hecho para vivirlo en Chile.</span>
-            <span className="payment-note"><Check size={14} /> Pagos seguros <span className="payment-note__brands">Webpay · Transbank</span></span>
+            <span className="payment-note"><Check size={14} /> Pagos seguros <span className="payment-note__brands">Mercado Pago</span></span>
           </div>
         </div>
       </footer>
@@ -752,14 +749,14 @@ function App() {
 
   const addToCart = (event, selectedTickets, buyer, selectedProducts = []) => {
     const additions = selectedTickets.map((ticketType) => ({
-      cartItemId: `${event.id}-${ticketType.id}-${crypto.randomUUID()}`,
+      cartItemId: `${event.id}-${ticketType.id}-${createUUID()}`,
       eventId: event.id,
       ticketTypeId: ticketType.id,
       quantity: ticketType.quantity,
       buyer,
     }));
     const productAdditions = selectedProducts.map((product) => ({
-      cartItemId: `${event.id}-${product.id}-${product.variantId ?? "default"}-${crypto.randomUUID()}`,
+      cartItemId: `${event.id}-${product.id}-${product.variantId ?? "default"}-${createUUID()}`,
       eventId: event.id,
       productId: product.id,
       variantId: product.variantId,
@@ -802,7 +799,7 @@ function App() {
   };
 
   const handleFreeRegistration = async (event, selectedTickets, buyer) => {
-    const checkoutKey = crypto.randomUUID();
+    const checkoutKey = createUUID();
     const order = await registerFreeOrder({
       checkoutKey,
       buyer,

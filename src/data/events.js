@@ -1,4 +1,5 @@
 import { requireSupabase } from "./supabase.js";
+import { createUUID } from "./site.js";
 
 const EVENT_SELECT =
   "id, producer_id, slug, title, description, category, venue, city, starts_at, cover_url, gallery_urls, status";
@@ -173,7 +174,7 @@ export async function publishProducerEvent(event) {
     throw new Error("Tu sesión de productor expiró. Vuelve a iniciar sesión.");
   }
 
-  const eventId = crypto.randomUUID();
+  const eventId = createUUID();
   const storagePaths = event.photos.map((_, index) =>
     `${userData.user.id}/${eventId}/${index + 1}.jpg`,
   );

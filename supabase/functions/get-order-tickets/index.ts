@@ -80,11 +80,26 @@ Deno.serve(async (request: Request) => {
     console.error("Could not load paid order items.", itemsError.message);
     return jsonResponse(500, { error: "order_items_lookup_failed" });
   }
-  const eventIds = [...new Set((items ?? []).map((item) => item.event_id))];
+  const { data: productItems, error: productItemsError } = await admin
+    .from("order_product_items")
+    .select("id, event_id, quantity, product_name, variant_name")
+    .eq("order_id", orderId);
+  if (productItemsError) {
+    console.error("Could not load paid order products.", productItemsError.message);
+    return jsonResponse(500, { error: "order_products_lookup_failed" });
+  }
+  const eventIds = [...new Set([
+    ...(items ?? []).map((item) => item.event_id),
+    ...(productItems ?? []).map((item) => item.event_id),
+  ])];
   const ticketTypeIds = [...new Set((items ?? []).map((item) => item.ticket_type_id))];
   const [{ data: events, error: eventsError }, { data: ticketTypes, error: typesError }] = await Promise.all([
-    admin.from("events").select("id, title, category, starts_at, venue, city").in("id", eventIds),
-    admin.from("ticket_types").select("event_id, id, name").in("event_id", eventIds).in("id", ticketTypeIds),
+    eventIds.length
+      ? admin.from("events").select("id, title, category, starts_at, venue, city").in("id", eventIds)
+      : Promise.resolve({ data: [], error: null }),
+    eventIds.length && ticketTypeIds.length
+      ? admin.from("ticket_types").select("event_id, id, name").in("event_id", eventIds).in("id", ticketTypeIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   if (eventsError || typesError) {
     console.error("Could not load event or ticket type details.", eventsError?.message ?? typesError?.message);
@@ -97,6 +112,18 @@ Deno.serve(async (request: Request) => {
   if (ticketsError) {
     console.error("Could not load issued tickets.", ticketsError.message);
     return jsonResponse(500, { error: "ticket_lookup_failed" });
+  }
+  const eventById = new Map((events ?? []).map((event) => [event.id, event]));
+  const deliveredProducts = (productItems ?? []).map((item) => ({
+    id: item.id,
+    eventId: item.event_id,
+    eventTitle: eventById.get(item.event_id)?.title ?? "el evento",
+    quantity: item.quantity,
+    name: item.product_name,
+    variant: item.variant_name,
+  }));
+  if (!tickets?.length) {
+    return jsonResponse(200, { status: "paid", tickets: [], products: deliveredProducts });
   }
   const ticketIds = (tickets ?? []).map((ticket) => ticket.id);
   const { data: secrets, error: secretsError } = ticketIds.length
@@ -120,7 +147,6 @@ Deno.serve(async (request: Request) => {
   }
 
   const itemById = new Map((items ?? []).map((item) => [item.id, item]));
-  const eventById = new Map((events ?? []).map((event) => [event.id, event]));
   const typeById = new Map((ticketTypes ?? []).map((type) => [`${type.event_id}:${type.id}`, type]));
   const secretByTicketId = new Map((secrets ?? []).map((secret) => [secret.ticket_id, secret]));
   try {
@@ -148,7 +174,7 @@ Deno.serve(async (request: Request) => {
         securityCode: await decryptCredential(secret.security_code_encrypted, encryptionKey),
       };
     }));
-    return jsonResponse(200, { status: "paid", tickets: deliveredTickets });
+    return jsonResponse(200, { status: "paid", tickets: deliveredTickets, products: deliveredProducts });
   } catch (error) {
     console.error("Could not decrypt ticket credentials.", error);
     return jsonResponse(500, { error: "ticket_credentials_unavailable" });

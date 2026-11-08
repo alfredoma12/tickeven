@@ -18,7 +18,9 @@ export function PurchaseSummary({ totals, actionLabel, onAction, disabled = fals
     <section className="purchase-summary" aria-label="Resumen de compra">
       <h2>Resumen de compra</h2>
       <PriceLine label="Entradas" value={totals.ticketSubtotal} />
-      <PriceLine label={`Administración (${ADMINISTRATION_PERCENTAGE})`} value={totals.administrationTotal} />
+      {totals.productSubtotal > 0 && <PriceLine label="Productos adicionales" value={totals.productSubtotal} />}
+      <PriceLine label={`Administración entradas (${ADMINISTRATION_PERCENTAGE})`} value={totals.ticketAdministrationTotal} />
+      {totals.productAdministrationTotal > 0 && <PriceLine label={`Administración productos (${ADMINISTRATION_PERCENTAGE})`} value={totals.productAdministrationTotal} />}
       <PriceLine label="Total" value={totals.total} strong />
       {!hideAction && (
         <button className="purchase-summary__action" type="button" disabled={disabled} onClick={onAction}>
@@ -54,15 +56,15 @@ export default function CartPage({ lines, totals, onUpdateQuantity, onRemove, on
                 <article className="cart-line" key={item.id}>
                   <img src={item.image} alt={item.imageAlt} />
                   <div className="cart-line__content">
-                    <span className="cart-line__category">{item.category} · {item.date} · {item.time}</span>
+                    <span className="cart-line__category">{item.kind === "product" ? `${item.productCategory} · ADICIONAL DEL EVENTO` : `${item.category} · ${item.date} · ${item.time}`}</span>
                     <h2>{item.title}</h2>
-                    <p className="cart-line__ticket-type">{item.ticketTypeName}</p>
+                    <p className="cart-line__ticket-type">{item.kind === "product" ? `${item.productName}${item.variantName ? ` · ${item.variantName}` : ""}` : item.ticketTypeName}</p>
                     <p>{item.venue}, {item.city}</p>
                     {item.buyer && <p className="cart-line__buyer">A nombre de {item.buyer.name} · {item.buyer.rut}</p>}
                     {item.buyer && <p className="cart-line__buyer">{item.buyer.email} · {item.buyer.phone}</p>}
                     <div className="cart-line__unit-prices">
-                      <span>Entrada <strong>${money.format(item.ticketPrice)}</strong></span>
-                      <span>Adm. ({ADMINISTRATION_PERCENTAGE}) por entrada <strong>${money.format(item.administrationFee)}</strong></span>
+                      <span>{item.kind === "product" ? "Producto" : "Entrada"} <strong>${money.format(item.ticketPrice)}</strong></span>
+                      <span>Adm. ({ADMINISTRATION_PERCENTAGE}) por unidad <strong>${money.format(item.administrationFee)}</strong></span>
                     </div>
                     <div className="cart-line__controls">
                       <div className="quantity-control" aria-label={`Cantidad de ${item.title}`}>
@@ -86,7 +88,7 @@ export default function CartPage({ lines, totals, onUpdateQuantity, onRemove, on
                   </div>
                   <strong className="cart-line__total">
                     ${money.format((item.ticketPrice + item.administrationFee) * item.quantity)}
-                    <small>{item.quantity} × entrada + administración</small>
+                    <small>{item.quantity} × {item.kind === "product" ? "producto" : "entrada"} + administración</small>
                   </strong>
                 </article>
               ))}
@@ -95,7 +97,7 @@ export default function CartPage({ lines, totals, onUpdateQuantity, onRemove, on
               totals={totals}
               actionLabel="Continuar al checkout"
               onAction={() => onNavigate("/checkout")}
-              note="El costo de administración se detalla por cada entrada."
+              note="El costo de administración se detalla por cada entrada o producto."
             />
           </div>
         ) : (
@@ -106,7 +108,7 @@ export default function CartPage({ lines, totals, onUpdateQuantity, onRemove, on
             <a href="/">Descubrir eventos <ArrowRight size={15} /></a>
           </section>
         )}
-        <p className="purchase-demo-note">El carrito dura mientras navegas por TickEven; al continuar, la orden queda registrada en Supabase. El pago se habilitará al integrar una pasarela.</p>
+        <p className="purchase-demo-note">Al continuar, el servidor valida y reserva el stock durante 20 minutos. El inventario se confirma después del pago.</p>
       </div>
     </main>
   );

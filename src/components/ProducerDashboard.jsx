@@ -2,13 +2,16 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  BarChart3,
   Check,
   CirclePlus,
   ImagePlus,
   LayoutDashboard,
   LogOut,
   MapPin,
+  Package,
   Plus,
+  ShoppingBag,
   Ticket,
   Trash2,
   Upload,
@@ -17,6 +20,7 @@ import { fetchProducerEvents } from "../data/events.js";
 import { endProducerSession } from "../data/producerPortal.js";
 import { requireSupabase } from "../data/supabase.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "../data/pricing.js";
+import Brand from "./Brand.jsx";
 
 const categories = ["Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
 const money = new Intl.NumberFormat("es-CL");
@@ -79,10 +83,12 @@ function newTicketType(index) {
 }
 
 function OverviewTab({ events, onCreate }) {
-  const ticketCount = events.reduce(
-    (sum, event) => sum + event.ticketTypes.reduce((eventSum, ticket) => eventSum + ticket.available, 0),
-    0,
-  );
+  const ticketTotals = events.reduce((totals, event) => ({
+    capacity: totals.capacity + event.ticketCapacity,
+    sold: totals.sold + event.ticketsSold,
+    reserved: totals.reserved + event.ticketsReserved,
+    available: totals.available + event.ticketsAvailable,
+  }), { capacity: 0, sold: 0, reserved: 0, available: 0 });
 
   return (
     <section className="producer-dashboard-content">
@@ -92,7 +98,8 @@ function OverviewTab({ events, onCreate }) {
       </div>
       <div className="producer-dashboard-stats">
         <article><span>EVENTOS PUBLICADOS</span><strong>{events.length}</strong><small>Experiencias en tu cuenta</small></article>
-        <article><span>ENTRADAS PUBLICADAS</span><strong>{money.format(ticketCount)}</strong><small>Unidades disponibles en total</small></article>
+        <article><span>ENTRADAS VENDIDAS</span><strong>{money.format(ticketTotals.sold)}</strong><small>Reservadas temporalmente: {money.format(ticketTotals.reserved)}</small></article>
+        <article><span>DISPONIBLES</span><strong>{money.format(ticketTotals.available)}</strong><small>De {money.format(ticketTotals.capacity)} entradas publicadas</small></article>
         <article><span>ADMINISTRACIÓN</span><strong>{ADMINISTRATION_PERCENTAGE}</strong><small>Sobre el precio de cada entrada</small></article>
       </div>
       <div className="producer-dashboard-list-card">
@@ -130,7 +137,7 @@ function EventsTab({ events, onCreate }) {
               <a className="producer-dashboard-event-row" href={`/evento/${event.slug}`} key={event.id}>
                 <img src={event.image} alt="" />
                 <span><strong>{event.title}</strong><small>{event.date} · {event.venue}, {event.city}</small></span>
-                <span className="producer-dashboard-event-row__status"><i /> Publicado · {event.ticketTypes.reduce((sum, ticket) => sum + ticket.available, 0)} entradas</span>
+                <span className="producer-dashboard-event-row__status"><i /> Publicado · {money.format(event.ticketsAvailable)} disponibles</span>
                 <ArrowRight size={16} />
               </a>
             ))}
@@ -312,6 +319,369 @@ function CreateEventTab({ onPublish, onCancel }) {
   );
 }
 
+function emptyProduct() {
+  return {
+    name: "",
+    description: "",
+    category: "Merchandising",
+    price: "",
+    stock: "",
+    imageUrl: "",
+    imageFile: null,
+    showInCheckout: true,
+    showOnEventPage: true,
+    isActive: true,
+    variants: [],
+  };
+}
+
+function ProductManagementTab({ events }) {
+  const [eventId, setEventId] = useState(events[0]?.id ?? "");
+  const [products, setProducts] = useState([]);
+  const [inventory, setInventory] = useState([]);
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const loadProducts = async () => {
+    if (!eventId) return;
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const client = requireSupabase();
+      const [productsResult, inventoryResult] = await Promise.all([
+        client.from("event_products")
+          .select("id, event_id, name, description, category, price_clp, stock_total, image_url, show_in_checkout, show_on_event_page, is_active, event_product_variants(id, name, stock_total, is_active)")
+          .eq("event_id", eventId)
+          .order("created_at", { ascending: false }),
+        client.from("event_product_inventory")
+          .select("*")
+          .eq("event_id", eventId),
+      ]);
+      if (productsResult.error) throw productsResult.error;
+      if (inventoryResult.error) throw inventoryResult.error;
+      setProducts(productsResult.data ?? []);
+      setInventory(inventoryResult.data ?? []);
+    } catch (error) {
+      console.error("No se pudieron cargar los productos del evento.", error);
+      setErrorMessage(error.message || "No se pudieron cargar los productos.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    setProduct(null);
+    void loadProducts();
+    const refresh = window.setInterval(() => { void loadProducts(); }, 30_000);
+    return () => window.clearInterval(refresh);
+  }, [eventId]);
+
+  const saveProduct = async (formEvent) => {
+    formEvent.preventDefault();
+    if (!eventId || !product) return;
+    setSaving(true);
+    setErrorMessage("");
+    let previewUrl = "";
+    try {
+      const client = requireSupabase();
+      const { data: userData, error: userError } = await client.auth.getUser();
+      if (userError || !userData.user) throw userError ?? new Error("Tu sesión de productor expiró.");
+
+      let imageUrl = product.imageUrl;
+      if (product.imageFile) {
+        const prepared = await optimizeImage(product.imageFile);
+        previewUrl = prepared.preview;
+        const imagePath = `${userData.user.id}/${eventId}/products/${product.id ?? crypto.randomUUID()}.jpg`;
+        const { error: uploadError } = await client.storage.from("event-media")
+          .upload(imagePath, prepared.blob, { contentType: "image/jpeg", upsert: true });
+        if (uploadError) throw uploadError;
+        imageUrl = client.storage.from("event-media").getPublicUrl(imagePath).data.publicUrl;
+      }
+
+      const variants = product.variants.map((variant) => ({
+        ...(variant.id ? { id: variant.id } : {}),
+        name: variant.name.trim(),
+        stock_total: Number(variant.stock_total),
+      }));
+      const { error } = await client.rpc("save_event_product", {
+        p_product_id: product.id ?? null,
+        p_event_id: eventId,
+        p_name: product.name.trim(),
+        p_description: product.description.trim(),
+        p_category: product.category.trim(),
+        p_price_clp: Number(product.price),
+        p_stock_total: variants.length ? 0 : Number(product.stock),
+        p_image_url: imageUrl || null,
+        p_show_in_checkout: product.showInCheckout,
+        p_show_on_event_page: product.showOnEventPage,
+        p_is_active: product.isActive,
+        p_variants: variants,
+      });
+      if (error) throw error;
+      setProduct(null);
+      await loadProducts();
+    } catch (error) {
+      console.error("No se pudo guardar el producto.", error);
+      setErrorMessage(error.message || "No se pudo guardar el producto.");
+    } finally {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setSaving(false);
+    }
+  };
+
+  const editProduct = (item) => setProduct({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    category: item.category,
+    price: String(item.price_clp),
+    stock: String(item.stock_total),
+    imageUrl: item.image_url ?? "",
+    imageFile: null,
+    showInCheckout: item.show_in_checkout,
+    showOnEventPage: item.show_on_event_page,
+    isActive: item.is_active,
+    variants: (item.event_product_variants ?? [])
+      .filter((variant) => variant.is_active)
+      .map((variant) => ({ ...variant, stock_total: String(variant.stock_total) })),
+  });
+
+  const inventoryFor = (item) => inventory.filter((row) => row.product_id === item.id);
+
+  return (
+    <section className="producer-dashboard-content">
+      <div className="producer-dashboard-welcome">
+        <div><span className="producer-dashboard-kicker">VENTA ASOCIADA A TUS EVENTOS</span><h2>Productos adicionales y merchandising</h2><p>El stock se reserva al crear la orden y queda confirmado junto con el pago.</p></div>
+        <button className="producer-dashboard-primary" type="button" disabled={!eventId} onClick={() => setProduct(emptyProduct())}><Plus size={17} /> Crear producto</button>
+      </div>
+      <label className="producer-event-filter">Evento
+        <select value={eventId} onChange={(event) => setEventId(event.target.value)}>
+          {events.map((event) => <option value={event.id} key={event.id}>{event.title}</option>)}
+        </select>
+      </label>
+      {errorMessage && <p className="producer-portal-error" role="alert">{errorMessage}</p>}
+      {product && (
+        <form className="producer-event-form producer-product-form" onSubmit={saveProduct}>
+          <section className="producer-event-form__section">
+            <div className="producer-event-form__section-heading"><span>+</span><div><h3>{product.id ? "Editar producto" : "Nuevo producto"}</h3><p>Nombre, precio, stock y dónde estará disponible.</p></div></div>
+            <div className="producer-event-form__grid">
+              <label>Nombre<input value={product.name} maxLength={100} required onChange={(event) => setProduct({ ...product, name: event.target.value })} /></label>
+              <label>Categoría<input list="product-categories" value={product.category} maxLength={60} required onChange={(event) => setProduct({ ...product, category: event.target.value })} /><datalist id="product-categories">{["Bebidas", "Comida", "Merchandising", "Accesorios", "Experiencias", "Otros"].map((category) => <option key={category} value={category} />)}</datalist></label>
+              <label>Precio (CLP)<input type="number" min="1" step="1" value={product.price} required onChange={(event) => setProduct({ ...product, price: event.target.value })} /></label>
+              <label className="producer-event-form__wide">Descripción<textarea rows={3} maxLength={1000} value={product.description} onChange={(event) => setProduct({ ...product, description: event.target.value })} /></label>
+              <label className="producer-event-form__wide">Fotografía<input type="file" accept="image/*" onChange={(event) => setProduct({ ...product, imageFile: event.target.files?.[0] ?? null })} />{product.imageUrl && <img className="producer-product-preview" src={product.imageUrl} alt="" />}</label>
+              {!product.variants.length && <label>Stock disponible<input type="number" min="0" step="1" value={product.stock} required onChange={(event) => setProduct({ ...product, stock: event.target.value })} /></label>}
+            </div>
+          </section>
+          <section className="producer-event-form__section">
+            <div className="producer-event-form__section-heading"><span>+</span><div><h3>Variantes y stock</h3><p>Opcional. Cada opción mantiene inventario propio (ej. talla, formato).</p></div></div>
+            {product.variants.map((variant, index) => (
+              <div className="producer-product-variant" key={variant.id ?? index}>
+                <label>Opción<input value={variant.name} maxLength={60} required onChange={(event) => setProduct({ ...product, variants: product.variants.map((item, row) => row === index ? { ...item, name: event.target.value } : item) })} /></label>
+                <label>Stock inicial<input type="number" min="0" step="1" value={variant.stock_total} required onChange={(event) => setProduct({ ...product, variants: product.variants.map((item, row) => row === index ? { ...item, stock_total: event.target.value } : item) })} /></label>
+                <button type="button" onClick={() => setProduct({ ...product, variants: product.variants.filter((_, row) => row !== index) })}>Quitar</button>
+              </div>
+            ))}
+            <button className="producer-event-form__add-ticket" type="button" onClick={() => setProduct({ ...product, stock: "", variants: [...product.variants, { name: "", stock_total: "" }] })}><CirclePlus size={16} /> Agregar variante</button>
+          </section>
+          <div className="producer-product-options">
+            <label><input type="checkbox" checked={product.showInCheckout} onChange={(event) => setProduct({ ...product, showInCheckout: event.target.checked })} /> Mostrar durante la compra de entradas</label>
+            <label><input type="checkbox" checked={product.showOnEventPage} onChange={(event) => setProduct({ ...product, showOnEventPage: event.target.checked })} /> Mostrar en adicionales y merch del evento</label>
+            <label><input type="checkbox" checked={product.isActive} onChange={(event) => setProduct({ ...product, isActive: event.target.checked })} /> Venta activa</label>
+          </div>
+          <div className="producer-event-form__publish">
+            <button className="producer-dashboard-primary" type="submit" disabled={saving}>{saving ? "Guardando…" : "Guardar producto"}</button>
+            <button className="producer-dashboard-back" type="button" onClick={() => setProduct(null)}>Cancelar</button>
+          </div>
+        </form>
+      )}
+      <div className="producer-dashboard-list-card">
+        <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">STOCK Y DISPONIBILIDAD</span><h3>Productos del evento</h3></div></div>
+        {loading ? <p className="producer-dashboard-empty">Cargando inventario…</p> : products.length ? (
+          <div className="producer-product-list">
+            {products.map((item) => {
+              const rows = inventoryFor(item);
+              const available = rows.reduce((sum, row) => sum + row.quantity_available, 0);
+              const sold = rows.reduce((sum, row) => sum + row.quantity_sold, 0);
+              const reserved = rows.reduce((sum, row) => sum + row.quantity_reserved, 0);
+              return (
+                <article className="producer-product-row" key={item.id}>
+                  {item.image_url ? <img src={item.image_url} alt="" /> : <span className="producer-product-row__placeholder"><Package size={22} /></span>}
+                  <div><strong>{item.name}</strong><small>{item.category} · ${money.format(item.price_clp)} · {item.is_active ? "Venta activa" : "Desactivado"}</small><small>Vendidos {sold} · Reservados {reserved} · Disponibles {available}</small></div>
+                  <button type="button" onClick={() => editProduct(item)}>Editar</button>
+                </article>
+              );
+            })}
+          </div>
+        ) : <div className="producer-dashboard-empty"><ShoppingBag size={24} /><strong>Aún no hay productos</strong><span>Asocia productos a este evento para vender adicionales o merchandising.</span></div>}
+      </div>
+    </section>
+  );
+}
+
+function SalesTab({ events }) {
+  const [eventId, setEventId] = useState(events[0]?.id ?? "");
+  const [period, setPeriod] = useState("total");
+  const [category, setCategory] = useState("all");
+  const [reports, setReports] = useState([]);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const report = reports[0];
+  const sales = report?.sales;
+  const ticketData = report?.tickets;
+  const productData = report?.products;
+
+  const loadSales = async () => {
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const { data, error } = await requireSupabase().rpc("get_producer_sales_dashboard", {
+        p_event_id: eventId || null,
+      });
+      if (error) throw error;
+      setReports(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error("No se pudieron cargar los informes de ventas.", error);
+      setErrorMessage(error.message || "No se pudieron cargar los informes.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSales();
+    const refresh = window.setInterval(() => { void loadSales(); }, 30_000);
+    return () => window.clearInterval(refresh);
+  }, [eventId]);
+
+  const allProducts = productData?.inventory ?? [];
+  const categories = [...new Set(allProducts.map((item) => item.category))].sort();
+  const visibleTicketTypes = category === "all" || category === "Entradas" ? ticketData?.types ?? [] : [];
+  const visibleProducts = category === "all" || category === "Productos"
+    ? allProducts
+    : category === "Entradas" ? [] : allProducts.filter((item) => item.category === category);
+  const dailyRows = (sales?.daily ?? []).slice(period === "7d" ? -7 : period === "today" ? -1 : -30);
+  const dailyValues = dailyRows.map((day) => ({
+    ...day,
+    value: category === "Entradas" ? day.tickets_clp
+      : categories.includes(category) ? day.product_categories?.[category] ?? 0
+        : category === "Productos" ? day.products_clp : day.tickets_clp + day.products_clp,
+  }));
+  const dailyMax = Math.max(1, ...dailyValues.map((day) => day.value));
+  const selectedPeriodTotal = period === "today" ? sales?.today_clp
+    : period === "7d" ? sales?.last_7_days_clp
+      : period === "month" ? sales?.month_clp : sales?.total_clp;
+  const exportCsv = () => {
+    const records = [
+      ["Tipo", "Nombre", "Capacidad", "Vendidas", "Reservadas", "Disponibles", "Recaudacion CLP"],
+      ...visibleTicketTypes.map((item) => ["Entrada", item.name, item.capacity, item.sold, item.reserved, item.available, item.revenue_clp]),
+      ...visibleProducts.map((item) => ["Producto", `${item.name}${item.variant ? ` - ${item.variant}` : ""}`, item.capacity, item.sold, item.reserved, item.available, item.revenue_clp]),
+    ];
+    const csv = records.map((row) => row.map((field) => `"${String(field ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `tickeven-ventas-${report?.event_id ?? "eventos"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <section className="producer-dashboard-content">
+      <div className="producer-dashboard-welcome">
+        <div><span className="producer-dashboard-kicker">INVENTARIO Y RECAUDACIÓN REAL</span><h2>Ventas de tus eventos</h2><p>Las cifras consideran órdenes aprobadas y reservas con vencimiento vigente.</p></div>
+        <button className="producer-dashboard-primary" type="button" onClick={exportCsv} disabled={!report}><BarChart3 size={16} /> Exportar CSV</button>
+      </div>
+      <label className="producer-event-filter">Evento
+        <select value={eventId} onChange={(event) => setEventId(event.target.value)}>
+          {!events.length && <option value="">No hay eventos disponibles</option>}
+          {events.map((event) => <option value={event.id} key={event.id}>{event.title}</option>)}
+        </select>
+      </label>
+      {errorMessage && <p className="producer-portal-error" role="alert">{errorMessage}</p>}
+      {loading ? <p className="producer-dashboard-empty">Consultando ventas confirmadas…</p> : report ? (
+        <>
+          <div className="producer-dashboard-stats producer-sales-stats">
+            <article><span>RECAUDACIÓN BRUTA</span><strong>${money.format(sales.total_clp)}</strong><small>Entradas + adicionales, cargos incluidos</small></article>
+            <article><span>ENTRADAS VENDIDAS</span><strong>{money.format(ticketData.sold)}</strong><small>Capacidad {money.format(ticketData.capacity)} · {money.format(ticketData.reserved)} reservadas</small></article>
+            <article><span>PRODUCTOS VENDIDOS</span><strong>{money.format(productData.sold)}</strong><small>Adicionales y merchandising</small></article>
+            <article><span>PRECIO PROMEDIO ENTRADA</span><strong>${money.format(ticketData.sold ? Math.round(ticketData.revenue_clp / ticketData.sold) : 0)}</strong><small>Sin sumar productos</small></article>
+          </div>
+          <div className="producer-dashboard-list-card producer-sales-chart">
+            <div className="producer-dashboard-list-card__heading">
+              <div><span className="producer-dashboard-kicker">EVOLUCIÓN DE VENTAS</span><h3>Recaudación diaria</h3></div>
+              <div className="producer-sales-filters">
+                <select aria-label="Filtrar por período" value={period} onChange={(event) => setPeriod(event.target.value)}>
+                  <option value="today">Hoy</option><option value="7d">Últimos 7 días</option><option value="30d">Últimos 30 días</option><option value="month">Este mes</option><option value="total">Acumulado</option>
+                </select>
+                <select aria-label="Filtrar por categoría" value={category} onChange={(event) => setCategory(event.target.value)}>
+                  <option value="all">Todas las categorías</option><option value="Entradas">Entradas</option><option value="Productos">Todos los productos</option>
+                  {categories.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="producer-sales-chart__headline"><span>Período seleccionado</span><strong>${money.format(selectedPeriodTotal ?? 0)}</strong></div>
+            <div className="producer-sales-chart__bars" role="img" aria-label="Gráfico de recaudación diaria">
+              {dailyValues.map((day) => (
+                <div className="producer-sales-chart__bar" key={day.date} title={`${day.date}: $${money.format(day.value)}`}>
+                  <span><i style={{ height: `${Math.max(3, day.value / dailyMax * 100)}%` }} /></span>
+                  <small>{day.date.slice(5)}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="producer-dashboard-stats producer-sales-stats">
+            <article><span>VENTAS HOY</span><strong>${money.format(sales.today_clp)}</strong></article>
+            <article><span>ÚLTIMOS 7 DÍAS</span><strong>${money.format(sales.last_7_days_clp)}</strong></article>
+            <article><span>ESTE MES</span><strong>${money.format(sales.month_clp)}</strong></article>
+            <article><span>ACUMULADO</span><strong>${money.format(sales.total_clp)}</strong></article>
+          </div>
+          <div className="producer-dashboard-list-card">
+            <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">COMPOSICIÓN DEL EVENTO</span><h3>{report.title}</h3></div></div>
+            <div className="producer-finance-breakdown">
+              <span>Entradas: <strong>${money.format(sales.ticket_subtotal_clp)}</strong></span>
+              <span>Adicionales: <strong>${money.format(sales.product_subtotal_clp)}</strong></span>
+              <span>Administración cobrada (10%): <strong>${money.format(sales.administration_clp)}</strong></span>
+              <span>Procesamiento Mercado Pago: <strong>{sales.processor_fees_clp === null ? "No registrado en todas las órdenes" : `$${money.format(sales.processor_fees_clp)}`}</strong></span>
+              <span>Reembolsos registrados: <strong>{sales.refunds_clp === null ? "No registrados" : `$${money.format(sales.refunds_clp)}`}</strong></span>
+              <span>Neto estimado: <strong>{sales.estimated_net_clp === null ? "No estimable con datos actuales" : `$${money.format(sales.estimated_net_clp)}`}</strong></span>
+              <span>Liquidado al productor: <strong>{sales.settled_clp === null ? "No registrado" : `$${money.format(sales.settled_clp)}`}</strong></span>
+              <span>Pendiente de liquidación: <strong>{sales.pending_settlement_clp === null ? "No registrado" : `$${money.format(sales.pending_settlement_clp)}`}</strong></span>
+            </div>
+          </div>
+          <div className="producer-dashboard-list-card">
+            <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">INVENTARIO</span><h3>Tipos de entrada</h3></div></div>
+            <div className="producer-sales-table">
+              {visibleTicketTypes.map((item) => (
+                <div className="producer-sales-table__row" key={item.id}>
+                  <span><strong>{item.name}</strong><small>{item.sold} vendidas · {item.reserved} reservadas · {item.available} disponibles</small><i><b style={{ width: `${item.capacity ? Math.min(100, item.sold / item.capacity * 100) : 0}%` }} /></i></span>
+                  <strong>{item.capacity ? (item.sold / item.capacity * 100).toFixed(1) : "0.0"}%</strong>
+                  <strong>${money.format(item.revenue_clp)}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="producer-dashboard-list-card">
+            <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">ADICIONALES Y MERCHANDISING</span><h3>Ventas e inventario de productos</h3></div></div>
+            <div className="producer-sales-table">
+              {visibleProducts.map((item) => (
+                <div className="producer-sales-table__row" key={`${item.product_id}:${item.variant_id ?? "default"}`}>
+                  <span><strong>{item.name}{item.variant ? ` · ${item.variant}` : ""}</strong><small>{item.category} · {item.sold} vendidos · {item.reserved} reservados · {item.available} disponibles</small><i><b style={{ width: `${item.capacity ? Math.min(100, item.sold / item.capacity * 100) : 0}%` }} /></i></span>
+                  <strong>{item.capacity ? (item.sold / item.capacity * 100).toFixed(1) : "0.0"}%</strong>
+                  <strong>${money.format(item.revenue_clp)}</strong>
+                </div>
+              ))}
+              {!productData.inventory?.length && <p className="producer-dashboard-empty">Este evento aún no tiene productos asociados.</p>}
+            </div>
+          </div>
+        </>
+      ) : <div className="producer-dashboard-empty">No hay ventas registradas para mostrar.</div>}
+    </section>
+  );
+}
+
 export default function ProducerDashboard({ onPublish, onNavigate }) {
   const [producer, setProducer] = useState(null);
   const [producerEvents, setProducerEvents] = useState([]);
@@ -363,6 +733,24 @@ export default function ProducerDashboard({ onPublish, onNavigate }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!producer?.id) return undefined;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const rows = await fetchProducerEvents(producer.id);
+        if (active) setProducerEvents(rows);
+      } catch (error) {
+        console.error("No se pudo actualizar el inventario del productor.", error);
+      }
+    };
+    const interval = window.setInterval(() => { void refresh(); }, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [producer?.id]);
+
   const signOut = async () => {
     try {
       await endProducerSession();
@@ -389,18 +777,18 @@ export default function ProducerDashboard({ onPublish, onNavigate }) {
   return (
     <div className="producer-dashboard">
       <aside className="producer-dashboard-sidebar">
-        <a className="brand" href="/" aria-label="TickEven.cl, inicio">
-          <span className="brand__mark"><Ticket size={20} strokeWidth={2.5} /></span><span>tickeven<span className="brand__dot">.</span>cl</span>
-        </a>
+        <Brand />
         <span className="producer-dashboard-sidebar__label">PRODUCTORES</span>
         <button className={activeTab === "overview" ? "is-active" : ""} type="button" onClick={() => setActiveTab("overview")}><LayoutDashboard size={17} /> Resumen</button>
         <button className={activeTab === "events" ? "is-active" : ""} type="button" onClick={() => setActiveTab("events")}><Ticket size={17} /> Mis eventos <span>{producerEvents.length}</span></button>
+        <button className={activeTab === "products" ? "is-active" : ""} type="button" onClick={() => setActiveTab("products")}><Package size={17} /> Productos</button>
+        <button className={activeTab === "sales" ? "is-active" : ""} type="button" onClick={() => setActiveTab("sales")}><BarChart3 size={17} /> Ventas e inventario</button>
         <button className="producer-dashboard-sidebar__create" type="button" onClick={() => setActiveTab("create")}><Plus size={16} /> Crear evento</button>
         <div className="producer-dashboard-sidebar__account"><span>{producerName.slice(0, 1).toUpperCase()}</span><div><strong>{producerName}</strong><small>Cuenta Supabase</small></div><button type="button" aria-label="Cerrar sesión" onClick={signOut}><LogOut size={16} /></button></div>
       </aside>
       <main className="producer-dashboard-main">
         <header className="producer-dashboard-topbar">
-          <div><span>PRODUCTORES</span><strong>{activeTab === "create" ? "Crear evento" : activeTab === "events" ? "Mis eventos" : "Dashboard"}</strong></div>
+          <div><span>PRODUCTORES</span><strong>{activeTab === "create" ? "Crear evento" : activeTab === "events" ? "Mis eventos" : activeTab === "products" ? "Productos adicionales" : activeTab === "sales" ? "Ventas e inventario" : "Dashboard"}</strong></div>
           <a href="/" target="_blank" rel="noreferrer">Ver sitio público <ArrowRight size={15} /></a>
         </header>
         {notice && <div className="producer-dashboard-notice" role="status"><Check size={16} />{notice}<button type="button" aria-label="Cerrar aviso" onClick={() => setNotice("")}>×</button></div>}
@@ -408,6 +796,10 @@ export default function ProducerDashboard({ onPublish, onNavigate }) {
           <CreateEventTab onPublish={publishEvent} onCancel={() => setActiveTab("overview")} />
         ) : activeTab === "events" ? (
           <EventsTab events={producerEvents} onCreate={() => setActiveTab("create")} />
+        ) : activeTab === "products" ? (
+          <ProductManagementTab events={producerEvents} />
+        ) : activeTab === "sales" ? (
+          <SalesTab events={producerEvents} />
         ) : (
           <OverviewTab events={producerEvents} onCreate={() => setActiveTab("create")} />
         )}

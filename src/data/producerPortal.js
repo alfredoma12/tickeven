@@ -1,4 +1,5 @@
 import { requireSupabase } from "./supabase.js";
+import { APP_URL } from "./site.js";
 
 export async function signInAccount(email, password, expectedRole) {
   const client = requireSupabase();
@@ -39,6 +40,10 @@ export async function signUpAccount({ email, password, fullName, rut, phone, rol
     email: email.trim().toLowerCase(),
     password,
     options: {
+      emailRedirectTo: new URL(
+        role === "collaborator" ? "/colaboradores/login" : "/productores/login",
+        APP_URL,
+      ).toString(),
       data: {
         account_type: role,
         full_name: fullName.trim(),

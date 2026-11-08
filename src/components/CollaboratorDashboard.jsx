@@ -3,6 +3,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { Camera, Check, CircleAlert, CircleX, Clock3, LogOut, RefreshCw, ScanLine, ShieldCheck, Ticket, TriangleAlert, Wifi, WifiOff } from "lucide-react";
 import { endProducerSession } from "../data/producerPortal.js";
 import { requireSupabase } from "../data/supabase.js";
+import Brand from "./Brand.jsx";
 
 const validationMessages = {
   already_used: "Esta entrada ya fue utilizada.",
@@ -360,9 +361,7 @@ export default function CollaboratorDashboard({ onNavigate }) {
   return (
     <div className="producer-dashboard collaborator-dashboard">
       <aside className="producer-dashboard-sidebar">
-        <a className="brand" href="/" aria-label="TickEven.cl, inicio">
-          <span className="brand__mark"><Ticket size={20} strokeWidth={2.5} /></span><span>tickeven<span className="brand__dot">.</span>cl</span>
-        </a>
+        <Brand />
         <span className="producer-dashboard-sidebar__label">ACCESO DE EVENTO</span>
         <span className="admin-dashboard__nav-link is-current"><ShieldCheck size={17} /> Validar entradas</span>
         <div className="producer-dashboard-sidebar__account"><span>{profile?.full_name?.slice(0, 1).toUpperCase() || "C"}</span><div><strong>{profile?.full_name || "Colaborador"}</strong><small>Acceso aprobado</small></div><button type="button" aria-label="Cerrar sesión" onClick={signOut}><LogOut size={16} /></button></div>

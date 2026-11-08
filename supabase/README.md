@@ -6,7 +6,8 @@
 2. En Supabase, copia la URL del proyecto y la **publishable key** a:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_PUBLISHABLE_KEY`
-3. En GitHub Actions, configura esas mismas variables como secrets del build para el sitio publicado.
+   - `VITE_APP_URL` (URL base pública; en local puedes usar `http://localhost:5173`)
+3. En GitHub Actions, configura las dos variables de Supabase como secrets; el workflow define `VITE_APP_URL=https://tickeven.cl`.
 
 La secret/service-role key nunca va en variables `VITE_*`, en el frontend ni en GitHub. Supabase la entrega dentro del entorno de Edge Functions. JWKS no se configura en el cliente.
 
@@ -18,7 +19,7 @@ Con Supabase CLI instalado y el proyecto creado:
 npx supabase login
 npx supabase link --project-ref TU_PROJECT_REF
 npx supabase db push
-npx supabase secrets set APP_ORIGIN=https://TU_USUARIO.github.io/TU_REPOSITORIO
+npx supabase secrets set APP_ORIGIN=https://tickeven.cl APP_PUBLIC_URL=https://tickeven.cl
 npx supabase functions deploy create-order
 npx supabase functions deploy register-free-order
 npx supabase functions deploy validate-ticket
@@ -27,7 +28,7 @@ npx supabase functions deploy mercadopago-webhook
 npx supabase functions deploy get-order-tickets
 ```
 
-`APP_ORIGIN` debe coincidir exactamente con el origen del sitio publicado. La migración crea perfiles al registrar usuarios, catálogo, órdenes, reservas temporales, entradas y las políticas RLS.
+`APP_ORIGIN` debe coincidir exactamente con `https://tickeven.cl`. `APP_PUBLIC_URL` es la base de las URLs de retorno de Mercado Pago. La migración crea perfiles al registrar usuarios, catálogo, órdenes, reservas temporales, entradas y las políticas RLS.
 
 ## Probar la aplicación publicada
 
@@ -37,18 +38,31 @@ npx supabase functions deploy get-order-tickets
    npx supabase db push --remote
    ```
 
-2. Despliega las funciones y configura el origen exacto del sitio publicado. Para el dominio estándar del repositorio GitHub Pages, usa el origen (sin `/tickeven/`):
+2. Despliega las funciones y configura el origen y URL base del dominio oficial:
 
    ```powershell
-   npx supabase secrets set APP_ORIGIN=https://alfredoma12.github.io
+   npx supabase secrets set APP_ORIGIN=https://tickeven.cl APP_PUBLIC_URL=https://tickeven.cl
    npx supabase functions deploy create-order
    npx supabase functions deploy validate-ticket
    ```
 
-   Si Pages usa un dominio personalizado, reemplaza `APP_ORIGIN` por ese origen.
+3. En GitHub, configura `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` como secrets del repositorio. El workflow `.github/workflows/deploy-pages.yml` publica `dist` en GitHub Pages con base `/`, conserva `public/CNAME` y genera `404.html` para que las rutas SPA funcionen al recargar. En Settings → Pages, selecciona **GitHub Actions** como fuente y establece `tickeven.cl` como Custom domain.
+4. En Supabase Auth → URL Configuration, fija Site URL en `https://tickeven.cl` y agrega `https://tickeven.cl/**` como redirect URL. Conserva `http://localhost:5173/**` solo si necesitas callbacks de desarrollo. Las confirmaciones de correo de productores y colaboradores regresan a sus respectivas pantallas de acceso en el dominio canónico.
+5. En el proveedor DNS, elimina registros A/AAAA en conflicto y configura:
 
-3. En GitHub, configura `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` como secrets del repositorio. El workflow `.github/workflows/deploy-pages.yml` los pasa a `npm run build` y publica `dist`. En Settings → Pages, selecciona **GitHub Actions** como fuente. El build configura la base `/tickeven/`, adecuada para la URL estándar del repositorio; si usas un dominio personalizado, cambia `VITE_BASE_PATH` del workflow a `/`.
-4. En Supabase Auth → URL Configuration, agrega la URL del sitio GitHub Pages a las redirect URLs. La confirmación de correo puede requerirse al registrar productores.
+   | Tipo | Host | Valor |
+   | --- | --- | --- |
+   | A | `@` | `185.199.108.153` |
+   | A | `@` | `185.199.109.153` |
+   | A | `@` | `185.199.110.153` |
+   | A | `@` | `185.199.111.153` |
+   | AAAA | `@` | `2606:50c0:8000::153` |
+   | AAAA | `@` | `2606:50c0:8001::153` |
+   | AAAA | `@` | `2606:50c0:8002::153` |
+   | AAAA | `@` | `2606:50c0:8003::153` |
+   | CNAME | `www` | `alfredoma12.github.io` |
+
+   GitHub Pages debe tener `tickeven.cl` como Custom domain; con ambos hosts configurados, Pages redirige `www` al dominio canónico. Espera la propagación DNS, verifica el dominio en Settings → Pages y activa **Enforce HTTPS** cuando el certificado esté disponible.
 
 ## Alcance del flujo conectado
 
@@ -85,10 +99,10 @@ npx supabase functions deploy get-order-tickets
   Configura los secretos de las Edge Functions (usa tus credenciales de prueba primero):
 
   ```powershell
-  npx supabase secrets set MERCADOPAGO_ACCESS_TOKEN=TOKEN_DE_PRUEBA MERCADOPAGO_WEBHOOK_SECRET=... MERCADOPAGO_CHECKOUT_MODE=test TICKET_CREDENTIALS_ENCRYPTION_KEY=... APP_PUBLIC_URL=https://alfredoma12.github.io/tickeven
+  npx supabase secrets set MERCADOPAGO_ACCESS_TOKEN=TOKEN_DE_PRUEBA MERCADOPAGO_WEBHOOK_SECRET=... MERCADOPAGO_CHECKOUT_MODE=test TICKET_CREDENTIALS_ENCRYPTION_KEY=... APP_ORIGIN=https://tickeven.cl APP_PUBLIC_URL=https://tickeven.cl
   ```
 
-  `TOKEN_DE_PRUEBA` se copia desde las credenciales de prueba de la aplicación de Mercado Pago. No identifiques el entorno solo por el prefijo: la documentación de Checkout Pro muestra credenciales de prueba con prefijo `APP_USR`. `MERCADOPAGO_CHECKOUT_MODE=test` selecciona la URL sandbox; para cobros reales se requiere cambiar explícitamente a `production` junto con las credenciales de producción. `APP_PUBLIC_URL` debe ser la URL base exacta del sitio, incluyendo `/tickeven` para GitHub Pages. `APP_ORIGIN` continúa siendo solo el origen `https://alfredoma12.github.io`. Opcionalmente, configura `MERCADOPAGO_COLLECTOR_ID` con el ID de vendedor que debe recibir los pagos.
+  `TOKEN_DE_PRUEBA` se copia desde las credenciales de prueba de la aplicación de Mercado Pago. No identifiques el entorno solo por el prefijo: la documentación de Checkout Pro muestra credenciales de prueba con prefijo `APP_USR`. `MERCADOPAGO_CHECKOUT_MODE=test` selecciona la URL sandbox; para cobros reales se requiere cambiar explícitamente a `production` junto con las credenciales de producción. `APP_PUBLIC_URL` y `APP_ORIGIN` deben ser `https://tickeven.cl`; el webhook de Mercado Pago sigue apuntando a la Edge Function de Supabase, no al sitio. Opcionalmente, configura `MERCADOPAGO_COLLECTOR_ID` con el ID de vendedor que debe recibir los pagos.
 
   Para el procedimiento y casos de prueba, consulta [MERCADOPAGO_TESTING.md](MERCADOPAGO_TESTING.md).
 - Una vez aplicada la migración de pagos, despliega las funciones:

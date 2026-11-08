@@ -11,6 +11,7 @@ import {
   MapPin,
   Menu,
   Search,
+  ShieldCheck,
   ShoppingBag,
   Ticket,
   X,
@@ -22,12 +23,14 @@ import EventDetailPage from "./components/EventDetailPage.jsx";
 import ProducerAuthPage from "./components/ProducerAuthPage.jsx";
 import ProducerDashboard from "./components/ProducerDashboard.jsx";
 import AdminDashboard from "./components/AdminDashboard.jsx";
-import { getCartLines, getCartTotals } from "./data/cart.js";
+import Brand from "./components/Brand.jsx";
+import { getCartLines, getCartProductLines, getCartTotals } from "./data/cart.js";
 import { fetchPublishedEvents, publishProducerEvent } from "./data/events.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "./data/pricing.js";
+import { APP_URL } from "./data/site.js";
 import { registerFreeOrder } from "./data/supabase.js";
 
-const categories = ["Todos", "Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
+const categories = ["Todos", "Conciertos", "Fiestas", "Festivales", "Experiencias", "Teatro", "Deportes", "Familia", "Conferencias"];
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 const CollaboratorDashboard = lazy(() => import("./components/CollaboratorDashboard.jsx"));
 
@@ -430,10 +433,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
     <div className="site-shell">
       <header className="site-header">
         <nav className="navigation page-container" aria-label="Navegación principal">
-          <a className="brand" href="#" aria-label="TickEven.cl, inicio">
-            <span className="brand__mark"><Ticket size={21} strokeWidth={2.5} /></span>
-            <span>tickeven<span className="brand__dot">.</span>cl</span>
-          </a>
+          <Brand />
           <button
             className="navigation__menu-toggle"
             type="button"
@@ -465,12 +465,12 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
               </select>
               <ChevronDown size={14} aria-hidden="true" />
             </label>
-            <a className="text-button producer-nav-link" href="/productores" target="_blank" rel="noreferrer">
-              Para productores <ArrowUpRight size={15} />
-            </a>
             <div className="navigation__actions">
-              <a className="login-button" href="/productores/login" hidden>
+              <a className="login-button" href="/productores/login">
                 Iniciar sesión
+              </a>
+              <a className="navigation__publish" href="/productores">
+                Publicar evento <ArrowUpRight size={15} />
               </a>
               <a
                 className="cart-button"
@@ -616,16 +616,25 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
           {renderEventGrid(featuredEvents)}
         </section>
 
+        <section className="benefits-section page-container" aria-labelledby="benefits-title">
+          <div className="benefits-section__heading">
+            <span className="section-kicker">UNA NUEVA FORMA DE VIVIR EVENTOS</span>
+            <h2 id="benefits-title">Todo pasa cuando estás ahí<span className="accent-dot">.</span></h2>
+          </div>
+          <div className="benefits-grid">
+            <article><span><Compass size={19} /></span><h3>Encuentra tu próximo plan</h3><p>Explora experiencias seleccionadas y descubre algo nuevo en tu ciudad.</p></article>
+            <article><span><ShieldCheck size={19} /></span><h3>Compra con confianza</h3><p>Un proceso de pago seguro y transparente, con el detalle de cada cargo.</p></article>
+            <article><span><Ticket size={19} /></span><h3>Tu entrada, siempre contigo</h3><p>Recibe entradas digitales con código QR listas para presentar en el acceso.</p></article>
+          </div>
+        </section>
+
       </main>
 
       <footer className="site-footer">
         <div className="page-container">
           <div className="footer-main">
             <div className="footer-brand">
-              <a className="brand brand--footer" href="#" aria-label="TickEven.cl, inicio">
-                <span className="brand__mark"><Ticket size={21} strokeWidth={2.5} /></span>
-                <span>tickeven<span className="brand__dot">.</span>cl</span>
-              </a>
+              <Brand className="brand brand--footer" />
               <p>La vida pasa fuera<br />de la pantalla.</p>
             </div>
             <div className="footer-links">
@@ -656,19 +665,41 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
 
 function App() {
   const [cart, setCart] = useState([]);
+  const [productCart, setProductCart] = useState([]);
   const [publishedEvents, setPublishedEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsError, setEventsError] = useState("");
   const [path, setPath] = useState(getRoutePath);
   const allEvents = publishedEvents;
-  const lines = useMemo(() => getCartLines(cart, allEvents), [cart, allEvents]);
+  const lines = useMemo(
+    () => [...getCartLines(cart, allEvents), ...getCartProductLines(productCart, allEvents)],
+    [cart, productCart, allEvents],
+  );
   const totals = useMemo(() => getCartTotals(lines), [lines]);
 
   useEffect(() => {
+    const canonicalUrl = new URL(path, APP_URL);
+    canonicalUrl.search = "";
+    canonicalUrl.hash = "";
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonicalUrl.toString());
+    document.querySelector('meta[property="og:url"]')?.setAttribute("content", canonicalUrl.toString());
+    const privateRoute = /^\/(admin|colaboradores)(\/|$)/.test(path) ||
+      /^\/productores\/(login|dashboard)(\/|$)/.test(path) ||
+      /^\/(carrito|checkout)(\/|$)/.test(path);
+    document.querySelector('meta[name="robots"]')?.setAttribute(
+      "content",
+      privateRoute ? "noindex,nofollow" : "index,follow",
+    );
+  }, [path]);
+
+  useEffect(() => {
     let active = true;
-    fetchPublishedEvents()
+    const loadEvents = () => fetchPublishedEvents()
       .then((loadedEvents) => {
-        if (active) setPublishedEvents(loadedEvents);
+        if (active) {
+          setPublishedEvents(loadedEvents);
+          setEventsError("");
+        }
       })
       .catch((error) => {
         console.error("No se pudieron leer los eventos publicados.", error);
@@ -677,7 +708,12 @@ function App() {
       .finally(() => {
         if (active) setEventsLoading(false);
       });
-    return () => { active = false; };
+    void loadEvents();
+    const refresh = window.setInterval(() => { void loadEvents(); }, 30_000);
+    return () => {
+      active = false;
+      window.clearInterval(refresh);
+    };
   }, []);
 
   const navigate = useCallback((to, { replace = false } = {}) => {
@@ -714,7 +750,7 @@ function App() {
     };
   }, []);
 
-  const addToCart = (event, selectedTickets, buyer) => {
+  const addToCart = (event, selectedTickets, buyer, selectedProducts = []) => {
     const additions = selectedTickets.map((ticketType) => ({
       cartItemId: `${event.id}-${ticketType.id}-${crypto.randomUUID()}`,
       eventId: event.id,
@@ -722,10 +758,28 @@ function App() {
       quantity: ticketType.quantity,
       buyer,
     }));
+    const productAdditions = selectedProducts.map((product) => ({
+      cartItemId: `${event.id}-${product.id}-${product.variantId ?? "default"}-${crypto.randomUUID()}`,
+      eventId: event.id,
+      productId: product.id,
+      variantId: product.variantId,
+      quantity: product.quantity,
+      buyer,
+    }));
     setCart((current) => [...current, ...additions]);
+    setProductCart((current) => [...current, ...productAdditions]);
   };
 
   const updateQuantity = (cartItemId, quantity) => {
+    const currentItem = lines.find((item) => item.id === cartItemId);
+    if (currentItem?.kind === "product") {
+      setProductCart((current) => current.flatMap((item) => {
+        if (item.cartItemId !== cartItemId) return [item];
+        if (quantity < 1) return [];
+        return [{ ...item, quantity: Math.min(quantity, currentItem.maxQuantity) }];
+      }));
+      return;
+    }
     setCart((current) => current.flatMap((item) => {
       if (item.cartItemId !== cartItemId) return [item];
       if (quantity < 1) return [];
@@ -738,6 +792,7 @@ function App() {
 
   const removeFromCart = (cartItemId) => {
     setCart((current) => current.filter((item) => item.cartItemId !== cartItemId));
+    setProductCart((current) => current.filter((item) => item.cartItemId !== cartItemId));
   };
 
   const handlePublishEvent = async (event) => {
@@ -778,14 +833,14 @@ function App() {
     const requestedSlug = path.slice("/evento/".length);
     const event = allEvents.find((candidate) => eventSlug(candidate) === requestedSlug);
     if (eventsLoading) return <main className="events-loading">Cargando evento…</main>;
-    return <EventDetailPage event={event} cartCount={totals.quantity} onAddToCart={addToCart} onFreeRegister={handleFreeRegistration} onNavigate={navigate} />;
+    return <EventDetailPage event={event} cartCount={totals.quantity + totals.productQuantity} onAddToCart={addToCart} onFreeRegister={handleFreeRegistration} onNavigate={navigate} />;
   }
   if (path === "/carrito") {
     return <CartPage lines={lines} totals={totals} onUpdateQuantity={updateQuantity} onRemove={removeFromCart} onNavigate={navigate} />;
   }
   if (path === "/checkout") return <CheckoutPage lines={lines} totals={totals} />;
 
-  return <HomePage cartCount={totals.quantity} events={allEvents} loading={eventsLoading} error={eventsError} onNavigate={navigate} />;
+  return <HomePage cartCount={totals.quantity + totals.productQuantity} events={allEvents} loading={eventsLoading} error={eventsError} onNavigate={navigate} />;
 }
 
 export default App;

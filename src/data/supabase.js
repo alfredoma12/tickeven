@@ -23,12 +23,12 @@ export function requireSupabase() {
   return supabase;
 }
 
-export async function createPendingOrder({ checkoutKey, lines }) {
+export async function createPendingOrder({ checkoutKey, lines, products = [] }) {
   const client = requireSupabase();
 
-  const firstBuyer = lines[0]?.buyer;
-  if (!firstBuyer || lines.some((line) => !line.buyer)) {
-    throw new Error("Completa los datos del comprador para todas las entradas antes de continuar.");
+  const firstBuyer = lines[0]?.buyer ?? products[0]?.buyer;
+  if (!firstBuyer || lines.some((line) => !line.buyer) || products.some((product) => !product.buyer)) {
+    throw new Error("Completa los datos del comprador antes de continuar.");
   }
 
   const { data, error } = await client.functions.invoke("create-order", {
@@ -40,6 +40,11 @@ export async function createPendingOrder({ checkoutKey, lines }) {
         ticket_type_id: String(line.ticketTypeId),
         quantity: line.quantity,
         buyer: line.buyer,
+      })),
+      products: products.map((product) => ({
+        product_id: product.productId,
+        variant_id: product.variantId || null,
+        quantity: product.quantity,
       })),
     },
   });
@@ -56,6 +61,11 @@ export async function createPendingOrder({ checkoutKey, lines }) {
       invalid_attendee: "Revisa los datos de las personas asociadas a las entradas.",
       insufficient_inventory: "Ya no hay suficientes entradas disponibles.",
       ticket_type_unavailable: "Este tipo de entrada no está disponible para la venta.",
+      insufficient_product_inventory: "Ya no hay suficiente stock de uno de los productos.",
+      product_unavailable: "Uno de los productos ya no está disponible.",
+      product_variant_required: "Selecciona una variante disponible para el producto.",
+      product_variant_unavailable: "La variante seleccionada ya no está disponible.",
+      invalid_product_item: "Revisa los productos y cantidades seleccionados.",
       order_creation_failed: "No se pudo guardar la orden en el servidor.",
     };
     const errorCode = responseError?.error;

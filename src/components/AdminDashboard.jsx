@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Check, LogOut, RefreshCw, ShieldCheck, Ticket, UserCheck, UserX } from "lucide-react";
 import { endProducerSession } from "../data/producerPortal.js";
 import { requireSupabase } from "../data/supabase.js";
+import Brand from "./Brand.jsx";
 
 const profileFields = "id, role, status, full_name, rut, phone, created_at";
 
@@ -187,9 +188,7 @@ export default function AdminDashboard({ onNavigate }) {
   return (
     <div className="producer-dashboard admin-dashboard">
       <aside className="producer-dashboard-sidebar">
-        <a className="brand" href="/" aria-label="TickEven.cl, inicio">
-          <span className="brand__mark"><Ticket size={20} strokeWidth={2.5} /></span><span>tickeven<span className="brand__dot">.</span>cl</span>
-        </a>
+        <Brand />
         <span className="producer-dashboard-sidebar__label">ADMINISTRACIÓN</span>
         <a className="admin-dashboard__nav-link" href="#solicitudes"><UserCheck size={17} /> Solicitudes <span>{pendingAccounts.length}</span></a>
         <a className="admin-dashboard__nav-link" href="#asignaciones"><ShieldCheck size={17} /> Colaboradores</a>

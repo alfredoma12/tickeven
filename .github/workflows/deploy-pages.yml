@@ -33,15 +33,15 @@ jobs:
         run: npm ci
       - name: Build site
         env:
-          GITHUB_PAGES: true
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
-          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_APP_URL: https://tickeven.cl
         run: |
           test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL repository secret" && exit 1)
           test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing VITE_SUPABASE_PUBLISHABLE_KEY repository secret" && exit 1)
           npm run build
           cp dist/index.html dist/404.html
+          printf 'tickeven.cl\n' > dist/CNAME
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

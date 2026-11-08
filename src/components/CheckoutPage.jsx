@@ -19,6 +19,7 @@ export default function CheckoutPage({ lines, totals }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutKey] = useState(() => crypto.randomUUID());
   const [paymentTickets, setPaymentTickets] = useState([]);
+  const [paymentProducts, setPaymentProducts] = useState([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [pdfError, setPdfError] = useState("");
@@ -41,6 +42,7 @@ export default function CheckoutPage({ lines, totals }) {
       const result = await getPaidOrderTickets({ orderId: returnOrderId, checkoutKey: returnCheckoutKey });
       setPaymentStatus(result.status);
       setPaymentTickets(result.tickets ?? []);
+      setPaymentProducts(result.products ?? []);
     } catch (error) {
       console.error("No se pudo consultar el resultado del pago.", error);
       setPaymentError(error.message || "No se pudo consultar el estado del pago.");
@@ -81,11 +83,16 @@ export default function CheckoutPage({ lines, totals }) {
             <p className="purchase-kicker">{paymentStatus === "paid"
               ? isFreeRegistration ? "INSCRIPCIÓN GRATUITA CONFIRMADA" : "PAGO CONFIRMADO"
               : "VERIFICANDO PAGO"}</p>
-            <h1>{paymentStatus === "paid" ? <>Tus entradas están listas<span>.</span></> : <>Estamos confirmando tu pago<span>.</span></>}</h1>
+            <h1>{paymentStatus === "paid" ? paymentTickets.length
+              ? <>Tus entradas están listas<span>.</span></>
+              : <>Tu compra está confirmada<span>.</span></>
+              : <>Estamos confirmando tu pago<span>.</span></>}</h1>
             <p>{paymentStatus === "paid"
               ? isFreeRegistration
                 ? "Tu inscripción gratuita está confirmada. Descarga el PDF y presenta el código QR en el acceso."
-                : "Mercado Pago confirmó la compra. Descarga el PDF de tus entradas y presenta el QR en el acceso."
+                : paymentTickets.length
+                  ? "Mercado Pago confirmó la compra. Descarga el PDF de tus entradas y presenta el QR en el acceso."
+                  : "Mercado Pago confirmó tu compra. Tus productos adicionales se retiran en el evento."
               : search.get("payment") === "failure"
                 ? "Mercado Pago no confirmó el pago. No se emitieron entradas. Puedes comprobar nuevamente el estado por si el aviso llegó antes que la notificación."
               : "La confirmación puede tardar unos segundos. Las entradas solo aparecen después de verificar el pago con Mercado Pago."}</p>
@@ -122,6 +129,14 @@ export default function CheckoutPage({ lines, totals }) {
                 <ArrowRight size={15} /> {downloadingEvent === eventKey ? "Preparando PDF…" : `Descargar entradas · ${group.title}`}
               </button>
             ))}
+            {paymentStatus === "paid" && paymentProducts.length > 0 && (
+              <section className="checkout-product-receipt" aria-label="Productos adicionales confirmados">
+                <h2>Productos adicionales confirmados</h2>
+                {paymentProducts.map((product) => (
+                  <p key={product.id}>{product.quantity} × {product.name}{product.variant ? ` · ${product.variant}` : ""} · Retiro en {product.eventTitle}</p>
+                ))}
+              </section>
+            )}
             <a href="/">Volver a eventos <ArrowRight size={15} /></a>
           </section>
         </div>
@@ -135,8 +150,8 @@ export default function CheckoutPage({ lines, totals }) {
         <div className="purchase-container">
           <section className="purchase-empty">
             <span><CreditCard size={25} /></span>
-            <h1>No hay entradas para pagar</h1>
-            <p>Agrega un evento al carrito antes de comenzar el checkout.</p>
+            <h1>No hay productos para pagar</h1>
+            <p>Agrega entradas o productos adicionales al carrito antes de comenzar el checkout.</p>
             <a href="/">Explorar eventos <ArrowRight size={15} /></a>
           </section>
         </div>
@@ -163,7 +178,13 @@ export default function CheckoutPage({ lines, totals }) {
               setCheckoutError("");
               setIsSubmitting(true);
               try {
-                const createdOrder = await createPendingOrder({ checkoutKey, lines });
+                const ticketLines = lines.filter((item) => item.kind !== "product");
+                const productLines = lines.filter((item) => item.kind === "product");
+                const createdOrder = await createPendingOrder({
+                  checkoutKey,
+                  lines: ticketLines,
+                  products: productLines,
+                });
                 window.sessionStorage.setItem(`tickeven:checkout:${createdOrder.id}`, checkoutKey);
                 const preference = await createMercadoPagoPreference({ orderId: createdOrder.id, checkoutKey });
                 window.location.assign(preference.checkout_url);
@@ -194,8 +215,9 @@ export default function CheckoutPage({ lines, totals }) {
                   <img src={item.image} alt="" />
                   <div>
                     <strong>{item.title}</strong>
-                    <span>{item.ticketTypeName} · {item.quantity} × ${money.format(item.ticketPrice)}</span>
+                    <span>{item.kind === "product" ? `${item.productName}${item.variantName ? ` · ${item.variantName}` : ""}` : item.ticketTypeName} · {item.quantity} × ${money.format(item.ticketPrice)}</span>
                     <span>Administración ({ADMINISTRATION_PERCENTAGE}) · ${money.format(item.administrationFee)} c/u</span>
+                    {item.kind === "product" && <span>Retiro en {item.title}</span>}
                     {item.buyer && <span>Comprador: {item.buyer.name} · RUT {item.buyer.rut}</span>}
                     {item.buyer && <span>{item.buyer.email} · {item.buyer.phone}</span>}
                   </div>

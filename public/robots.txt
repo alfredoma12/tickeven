@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /checkout
+Disallow: /carrito
+Disallow: /admin
+Disallow: /colaboradores
+Disallow: /productores/dashboard
+
+Sitemap: https://tickeven.cl/sitemap.xml

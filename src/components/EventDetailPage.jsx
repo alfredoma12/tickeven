@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "../data/pricing.js";
+import Brand from "./Brand.jsx";
 
 const money = new Intl.NumberFormat("es-CL");
 
@@ -59,6 +60,8 @@ function NotFound() {
 export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeRegister, onNavigate }) {
   const [selectedImage, setSelectedImage] = useState(event?.image ?? "");
   const [quantities, setQuantities] = useState({});
+  const [productQuantities, setProductQuantities] = useState({});
+  const [productVariants, setProductVariants] = useState({});
   const [buyerFormOpen, setBuyerFormOpen] = useState(false);
   const [rut, setRut] = useState("");
   const [rutError, setRutError] = useState("");
@@ -87,6 +90,25 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
   );
   const ticketCount = selectedTickets.reduce((sum, ticketType) => sum + ticketType.quantity, 0);
   const ticketSubtotal = selectedTickets.reduce((sum, ticketType) => sum + ticketType.price * ticketType.quantity, 0);
+  const selectedProducts = useMemo(() => (event?.products ?? []).flatMap((product) => {
+    const variants = product.variants.filter((variant) => variant.id);
+    const choices = variants.length ? variants : [{ id: null, name: "", available: product.available }];
+    return choices.flatMap((variant) => {
+      const quantity = productQuantities[`${product.id}:${variant.id ?? ""}`] ?? 0;
+      return quantity ? [{
+        ...product,
+        variantId: variant.id,
+        variantName: variant.name,
+        quantity,
+      }] : [];
+    });
+  }), [event, productQuantities]);
+  const productCount = selectedProducts.reduce((sum, product) => sum + product.quantity, 0);
+  const productSubtotal = selectedProducts.reduce((sum, product) => sum + product.price * product.quantity, 0);
+  const productAdministrationTotal = selectedProducts.reduce(
+    (sum, product) => sum + getAdministrationFee(product.price) * product.quantity,
+    0,
+  );
   const isFreeSelection = selectedTickets.length > 0 && selectedTickets.every((ticketType) => ticketType.price === 0);
   const administrationTotal = selectedTickets.reduce(
     (sum, ticketType) => sum + getAdministrationFee(ticketType.price) * ticketType.quantity,
@@ -94,12 +116,22 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
   );
 
   if (!event) return <NotFound />;
+  const eventProducts = event.products ?? [];
 
   const changeQuantity = (ticketType, change) => {
     setQuantities((current) => {
       const quantity = current[ticketType.id] ?? 0;
       const nextQuantity = Math.max(0, Math.min(ticketType.available, 10, quantity + change));
       return { ...current, [ticketType.id]: nextQuantity };
+    });
+  };
+
+  const changeProductQuantity = (product, variant, change) => {
+    const key = `${product.id}:${variant?.id ?? ""}`;
+    setProductQuantities((current) => {
+      const quantity = current[key] ?? 0;
+      const nextQuantity = Math.max(0, Math.min(variant?.available ?? product.available, 10, quantity + change));
+      return { ...current, [key]: nextQuantity };
     });
   };
 
@@ -120,7 +152,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
 
     setRutError("");
     setRegistrationError("");
-    if (isFreeSelection) {
+    if (isFreeSelection && selectedProducts.length === 0) {
       setIsRegistering(true);
       try {
         await onFreeRegister(event, selectedTickets, buyer);
@@ -132,7 +164,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
       }
       return;
     }
-    onAddToCart(event, selectedTickets, buyer);
+    onAddToCart(event, selectedTickets, buyer, selectedProducts);
     onNavigate("/carrito");
   };
 
@@ -142,10 +174,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
     <div className="event-detail-shell">
       <header className="event-detail-header">
         <nav className="event-detail-header__inner" aria-label="Navegación del evento">
-          <a className="brand" href="/" aria-label="TickEven.cl, inicio">
-            <span className="brand__mark"><Ticket size={21} strokeWidth={2.5} /></span>
-            <span>tickeven<span className="brand__dot">.</span>cl</span>
-          </a>
+          <Brand />
           <a className="event-detail-header__back" href="/"><ArrowLeft size={15} /> Explorar eventos</a>
           <a className="cart-button event-detail-header__cart" href="/carrito" aria-label={`Carrito, ${cartCount} entradas`}>
             <ShoppingBag size={18} /><span>Carrito</span>
@@ -189,8 +218,53 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
               </div>
               <p>{event.description}</p>
               <div className="event-detail-copy__note"><ShieldCheck size={16} /> Entradas digitales · Compra segura</div>
+              <div className={`event-inventory-summary${event.ticketsAvailable === 0 ? " is-sold-out" : ""}`}>
+                <Ticket size={16} />
+                <span>{event.ticketsAvailable === 0
+                  ? "ENTRADAS AGOTADAS"
+                  : event.ticketsAvailable <= Math.max(10, Math.ceil(event.ticketCapacity * 0.1))
+                    ? `¡Últimas entradas disponibles! ${event.ticketsAvailable} restantes`
+                    : `¡${money.format(event.ticketsAvailable)} entradas disponibles!`}</span>
+              </div>
             </div>
           </section>
+
+          {eventProducts.some((product) => product.showOnEventPage) && (
+            <section className="event-products-section event-products-section--public" aria-labelledby="event-products-public-title">
+              <div className="event-detail-section-heading">
+                <div><span className="event-detail-step">ADICIONALES Y MERCH OFICIAL</span><h2 id="event-products-public-title">Productos de este evento</h2></div>
+                <ShoppingBag size={20} />
+              </div>
+              <div className="event-products-grid">
+                {eventProducts.filter((product) => product.showOnEventPage).map((product) => {
+                  const variants = product.variants.filter((variant) => variant.id);
+                  const selectedVariantId = productVariants[product.id] ?? variants[0]?.id ?? "";
+                  const selectedVariant = variants.find((variant) => variant.id === selectedVariantId);
+                  const available = selectedVariant?.available ?? product.available;
+                  const quantityKey = `${product.id}:${selectedVariant?.id ?? ""}`;
+                  const quantity = productQuantities[quantityKey] ?? 0;
+                  return (
+                    <article className="event-product-card" key={product.id}>
+                      {product.image && <img src={product.image} alt={product.name} loading="lazy" />}
+                      <div className="event-product-card__content">
+                        <span>{product.category}</span><h3>{product.name}</h3>
+                        {product.description && <p>{product.description}</p>}
+                        <strong>${money.format(product.price)} <small>+ ${money.format(getAdministrationFee(product.price))} administración</small></strong>
+                        {variants.length > 0 && <label>Opción<select value={selectedVariantId} onChange={(changeEvent) => setProductVariants((current) => ({ ...current, [product.id]: changeEvent.target.value }))}>{variants.map((variant) => <option value={variant.id} key={variant.id}>{variant.name} · {variant.available} disponibles</option>)}</select></label>}
+                        <span className={`event-product-card__availability${available === 0 ? " is-sold-out" : available <= 5 ? " is-low" : ""}`}>{available === 0 ? "AGOTADO" : available <= 5 ? `Últimas unidades · ${available}` : `${available} disponibles`}</span>
+                        <div className="quantity-control" aria-label={`Cantidad de ${product.name}`}>
+                          <button type="button" aria-label={`Quitar una unidad de ${product.name}`} disabled={!available || quantity === 0} onClick={() => changeProductQuantity(product, selectedVariant, -1)}><Minus size={14} /></button>
+                          <span>{quantity}</span>
+                          <button type="button" aria-label={`Agregar una unidad de ${product.name}`} disabled={!available || quantity >= Math.min(10, available)} onClick={() => changeProductQuantity(product, selectedVariant, 1)}><Plus size={14} /></button>
+                        </div>
+                        {quantity > 0 && <small className="event-product-card__hint">Se retira en el evento.</small>}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           <div className="event-detail-layout">
             <section className="event-ticket-section" aria-labelledby="ticket-options-title">
@@ -251,18 +325,54 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
                 <div><MapPin size={16} /><span>{event.venue}, {event.city}</span></div>
               </div>
 
+              {eventProducts.some((product) => product.showInCheckout) && (
+                <section className="event-products-section" aria-labelledby="event-products-title">
+                  <div className="event-detail-section-heading">
+                    <div><span className="event-detail-step">ADICIONALES PARA TU COMPRA</span><h2 id="event-products-title">Agrega productos a tu orden</h2></div>
+                    <ShoppingBag size={20} />
+                  </div>
+                  <div className="event-products-grid">
+                    {eventProducts.filter((product) => product.showInCheckout).map((product) => {
+                      const variants = product.variants.filter((variant) => variant.id);
+                      const selectedVariantId = productVariants[product.id] ?? variants[0]?.id ?? "";
+                      const selectedVariant = variants.find((variant) => variant.id === selectedVariantId);
+                      const available = selectedVariant?.available ?? product.available;
+                      return (
+                        <article className="event-product-card" key={product.id}>
+                          {product.image && <img src={product.image} alt={product.name} loading="lazy" />}
+                          <div className="event-product-card__content">
+                            <span>{product.category}</span>
+                            <h3>{product.name}</h3>
+                            {product.description && <p>{product.description}</p>}
+                            <strong>${money.format(product.price)} <small>+ ${money.format(getAdministrationFee(product.price))} administración</small></strong>
+                            {variants.length > 0 && <label>Opción<select value={selectedVariantId} onChange={(changeEvent) => setProductVariants((current) => ({ ...current, [product.id]: changeEvent.target.value }))}>{variants.map((variant) => <option value={variant.id} key={variant.id}>{variant.name} · {variant.available} disponibles</option>)}</select></label>}
+                            <span className={`event-product-card__availability${available === 0 ? " is-sold-out" : available <= 5 ? " is-low" : ""}`}>{available === 0 ? "AGOTADO" : available <= 5 ? `Últimas unidades · ${available}` : `${available} disponibles`}</span>
+                            <div className="quantity-control" aria-label={`Cantidad de ${product.name}`}>
+                              <button type="button" aria-label={`Quitar una unidad de ${product.name}`} disabled={!available || (productQuantities[`${product.id}:${selectedVariant?.id ?? ""}`] ?? 0) === 0} onClick={() => changeProductQuantity(product, selectedVariant, -1)}><Minus size={14} /></button>
+                              <span>{productQuantities[`${product.id}:${selectedVariant?.id ?? ""}`] ?? 0}</span>
+                              <button type="button" aria-label={`Agregar una unidad de ${product.name}`} disabled={!available || (productQuantities[`${product.id}:${selectedVariant?.id ?? ""}`] ?? 0) >= Math.min(10, available)} onClick={() => changeProductQuantity(product, selectedVariant, 1)}><Plus size={14} /></button>
+                            </div>
+                            {productQuantities[`${product.id}:${selectedVariant?.id ?? ""}`] > 0 && <small className="event-product-card__hint">Se retira en el evento.</small>}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
               {buyerFormOpen && (
                 <section className="event-buyer-card" ref={buyerFormRef} aria-labelledby="buyer-title">
                   <div className="event-detail-section-heading">
                     <div>
                       <span className="event-detail-step">02 · TUS DATOS</span>
-                      <h2 id="buyer-title">¿A quién enviamos las entradas?</h2>
+                      <h2 id="buyer-title">{ticketCount ? "¿A quién enviamos las entradas?" : "¿A quién preparamos tu compra?"}</h2>
                     </div>
                     <UserRound size={20} />
                   </div>
-                  <p>{isFreeSelection
+                  <p>{isFreeSelection && !productCount
                     ? "Al confirmar, emitiremos tus entradas gratuitas al instante. No necesitas carrito ni pasar por Mercado Pago."
-                    : "Al continuar, guardaremos tus datos para preparar la compra y redirigirte al carrito."}</p>
+                    : "Al continuar, guardaremos tus datos para preparar tu compra. Los productos se retiran en el evento."}</p>
                   <form className="event-buyer-form" onSubmit={submitBuyerDetails}>
                     <label>Nombre y apellido
                       <input name="name" autoComplete="name" placeholder="Como aparece en tu documento" required />
@@ -306,7 +416,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
 
             <aside className="event-order-card" aria-label="Resumen de entradas seleccionadas">
               <span className="event-detail-step">TU SELECCIÓN</span>
-              <h2>Resumen de entradas</h2>
+              <h2>Resumen de compra</h2>
               {selectedTickets.length ? (
                 <div className="event-order-card__items">
                   {selectedTickets.map((ticketType) => (
@@ -317,21 +427,31 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
                   ))}
                 </div>
               ) : (
-                <p className="event-order-card__empty">Selecciona un tipo de entrada para ver el detalle.</p>
+                <p className="event-order-card__empty">{productCount ? "Tu selección de adicionales:" : "Selecciona entradas o productos para ver el detalle."}</p>
               )}
+              {selectedProducts.length > 0 && <div className="event-order-card__items event-order-card__items--products">
+                <span className="event-detail-step">PRODUCTOS ADICIONALES</span>
+                {selectedProducts.map((product) => (
+                  <div className="event-order-card__item" key={`${product.id}:${product.variantId ?? "default"}`}>
+                    <span>{product.quantity} × {product.name}{product.variantName ? ` · ${product.variantName}` : ""}</span>
+                    <strong>${money.format(product.price * product.quantity)}</strong>
+                  </div>
+                ))}
+              </div>}
               <div className="event-order-card__totals">
                 <div><span>Entradas · {ticketCount}</span><strong>${money.format(ticketSubtotal)}</strong></div>
-                <div><span>{isFreeSelection ? "Administración" : `Administración (${ADMINISTRATION_PERCENTAGE})`}</span><strong>{isFreeSelection ? "Sin cargo" : `$${money.format(administrationTotal)}`}</strong></div>
-                <div className="event-order-card__total"><span>Total</span><strong>${money.format(ticketSubtotal + administrationTotal)}</strong></div>
+                {productCount > 0 && <div><span>Productos · {productCount}</span><strong>${money.format(productSubtotal)}</strong></div>}
+                <div><span>Administración ({ADMINISTRATION_PERCENTAGE})</span><strong>${money.format(administrationTotal + productAdministrationTotal)}</strong></div>
+                <div className="event-order-card__total"><span>Total</span><strong>${money.format(ticketSubtotal + administrationTotal + productSubtotal + productAdministrationTotal)}</strong></div>
               </div>
               {!buyerFormOpen ? (
                 <button
                   className="event-order-card__continue"
                   type="button"
-                  disabled={!ticketCount}
+                  disabled={!ticketCount && !productCount}
                   onClick={() => setBuyerFormOpen(true)}
                 >
-                  {isFreeSelection ? "Inscribirme gratis" : "Continuar"} <ArrowRight size={16} />
+                  {isFreeSelection && !productCount ? "Inscribirme gratis" : "Continuar"} <ArrowRight size={16} />
                 </button>
               ) : (
                 <button
@@ -342,7 +462,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
                   Editar entradas <ArrowLeft size={15} />
                 </button>
               )}
-              <p className="event-order-card__secure"><Check size={14} /> {isFreeSelection ? "Inscripción gratuita · Sin Mercado Pago" : "No se realizará ningún cobro todavía."}</p>
+              <p className="event-order-card__secure"><Check size={14} /> {isFreeSelection && !productCount ? "Inscripción gratuita · Sin Mercado Pago" : "Compra única · productos asociados al evento."}</p>
             </aside>
           </div>
         </div>

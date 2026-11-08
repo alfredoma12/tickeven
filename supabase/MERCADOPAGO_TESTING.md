@@ -47,8 +47,8 @@ Estos nombres de secretos, la base de datos de órdenes y la emisión de entrada
    - `MERCADOPAGO_ACCESS_TOKEN`: Access Token de prueba del vendedor de prueba.
    - `MERCADOPAGO_WEBHOOK_SECRET`: secreto de firma generado al configurar Webhooks en la aplicación de Mercado Pago.
    - `MERCADOPAGO_CHECKOUT_MODE`: `test` durante las pruebas. Para producción, se cambia explícitamente a `production` junto con las credenciales de producción.
-   - `APP_ORIGIN`: origen exacto del frontend, sin la ruta del repositorio.
-   - `APP_PUBLIC_URL`: URL pública del frontend, incluida la ruta base si se usa GitHub Pages.
+   - `APP_ORIGIN`: `https://tickeven.cl`, el origen exacto del frontend.
+   - `APP_PUBLIC_URL`: `https://tickeven.cl`, base de las URLs de retorno.
    - `TICKET_CREDENTIALS_ENCRYPTION_KEY`: clave de 32 bytes codificada en Base64, requerida por esta aplicación para cifrar credenciales de entradas. No es una credencial de Mercado Pago.
 2. En la aplicación de Mercado Pago, configura Webhooks para el evento **Pagos** (`payment`) y una URL HTTPS que apunte a la Edge Function. La documentación recomienda configurar por separado URL de prueba y URL de producción.
 3. Despliega las funciones de Supabase que componen este flujo:

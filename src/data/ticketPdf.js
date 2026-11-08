@@ -1,14 +1,17 @@
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
+import logoAsset from "../../style/tickevenlogo.jpeg";
 
 const colors = {
-  green: [47, 125, 74],
-  deepGreen: [36, 92, 56],
-  paleGreen: [234, 243, 236],
-  ink: [28, 35, 29],
-  muted: [103, 111, 103],
-  line: [223, 229, 221],
-  paper: [248, 249, 246],
+  blue: [21, 91, 255],
+  violet: [114, 0, 255],
+  magenta: [224, 0, 200],
+  paleViolet: [22, 17, 34],
+  ink: [248, 248, 252],
+  muted: [161, 161, 170],
+  line: [43, 43, 53],
+  paper: [5, 5, 5],
+  surface: [13, 13, 18],
   white: [255, 255, 255],
 };
 
@@ -50,19 +53,33 @@ function formatPurchaseDate(value) {
 }
 
 async function loadLogo() {
-  const response = await fetch(`${import.meta.env.BASE_URL}favicon.svg`);
-  if (!response.ok) throw new Error("No se pudo cargar el logo de TickEven para la entrada.");
-  const svg = await response.text();
   const image = new Image();
-  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+  image.src = logoAsset;
   await image.decode();
   const canvas = document.createElement("canvas");
-  canvas.width = 192;
-  canvas.height = 192;
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
   const context = canvas.getContext("2d");
   if (!context) throw new Error("No se pudo preparar el logo para la entrada.");
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/png");
+  return canvas.toDataURL("image/jpeg", 0.94);
+}
+
+function drawBrandGradient(pdf, width, y, height) {
+  const stops = [colors.blue, colors.violet, colors.magenta];
+  const segments = 120;
+  for (let index = 0; index < segments; index += 1) {
+    const progress = index / (segments - 1);
+    const section = progress < 0.5 ? 0 : 1;
+    const localProgress = section === 0 ? progress * 2 : (progress - 0.5) * 2;
+    const start = stops[section];
+    const end = stops[section + 1];
+    const color = start.map((channel, channelIndex) =>
+      Math.round(channel + (end[channelIndex] - channel) * localProgress),
+    );
+    pdf.setFillColor(...color);
+    pdf.rect((width * index) / segments, y, width / segments + 0.12, height, "F");
+  }
 }
 
 function drawLabel(pdf, label, value, x, y, width, valueSize = 11) {
@@ -106,19 +123,14 @@ export async function downloadTicketPdf({ eventTitle, event, tickets, orderId })
 
     pdf.setFillColor(...colors.paper);
     pdf.rect(0, 0, pageWidth, 297, "F");
-    pdf.setFillColor(...colors.green);
+    pdf.setFillColor(...colors.surface);
     pdf.rect(0, 0, pageWidth, 53, "F");
-    pdf.setFillColor(...colors.deepGreen);
-    pdf.rect(0, 49, pageWidth, 4, "F");
-    pdf.addImage(logo, "PNG", 15, 11, 13, 13);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(16);
-    pdf.setTextColor(...colors.white);
-    pdf.text("TickEven.cl", 33, 21);
+    drawBrandGradient(pdf, pageWidth, 51, 2);
+    pdf.addImage(logo, "JPEG", 15, 12, 68, 19.13);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
-    pdf.setTextColor(231, 242, 233);
-    pdf.text("ENTRADA DIGITAL", 33, 28);
+    pdf.setTextColor(...colors.muted);
+    pdf.text("ENTRADA DIGITAL", 17, 39);
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(8);
     pdf.setTextColor(...colors.white);
@@ -127,14 +139,14 @@ export async function downloadTicketPdf({ eventTitle, event, tickets, orderId })
     pdf.setFontSize(7);
     pdf.text("GUARDA ESTA ENTRADA", pageWidth - 15, 26, { align: "right" });
 
-    pdf.setFillColor(...colors.white);
+    pdf.setFillColor(...colors.surface);
     pdf.setDrawColor(...colors.line);
     pdf.roundedRect(12, 59, pageWidth - 24, 199, 4, 4, "FD");
-    pdf.setFillColor(...colors.paleGreen);
+    pdf.setFillColor(...colors.paleViolet);
     pdf.roundedRect(18, 66, pageWidth - 36, 40, 3, 3, "F");
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(7);
-    pdf.setTextColor(...colors.deepGreen);
+    pdf.setTextColor(198, 169, 255);
     pdf.text((event?.category || "EVENTO").toLocaleUpperCase("es"), 24, 75);
     pdf.setFontSize(19);
     pdf.setTextColor(...colors.ink);
@@ -152,7 +164,7 @@ export async function downloadTicketPdf({ eventTitle, event, tickets, orderId })
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(7);
-    pdf.setTextColor(...colors.green);
+    pdf.setTextColor(...colors.blue);
     pdf.text("DETALLES DE TU ENTRADA", 20, 119);
     pdf.setDrawColor(...colors.line);
     pdf.line(20, 122, pageWidth - 20, 122);
@@ -184,11 +196,11 @@ export async function downloadTicketPdf({ eventTitle, event, tickets, orderId })
     pdf.text("Administración", 115, 195);
     pdf.text(fee === 0 ? "Sin cargo" : `$${money.format(fee)} CLP`, pageWidth - 20, 195, { align: "right" });
     pdf.setFont("helvetica", "bold");
-    pdf.setTextColor(...colors.deepGreen);
+    pdf.setTextColor(...colors.violet);
     pdf.text("Total", 115, 205);
     pdf.text(total === 0 ? "Gratis" : `$${money.format(total)} CLP`, pageWidth - 20, 205, { align: "right" });
 
-    pdf.setFillColor(250, 248, 239);
+    pdf.setFillColor(...colors.paleViolet);
     pdf.roundedRect(18, 220, pageWidth - 36, 25, 3, 3, "F");
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(7);
@@ -196,7 +208,7 @@ export async function downloadTicketPdf({ eventTitle, event, tickets, orderId })
     pdf.text("CÓDIGO DE SEGURIDAD · USAR SOLO SI NO SE PUEDE LEER EL QR", 24, 229);
     pdf.setFont("courier", "bold");
     pdf.setFontSize(16);
-    pdf.setTextColor(...colors.deepGreen);
+    pdf.setTextColor(...colors.white);
     pdf.text(ticket.securityCode, 24, 239);
 
     pdf.setFont("helvetica", "normal");

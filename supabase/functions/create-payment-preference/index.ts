@@ -68,22 +68,42 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(200, { checkout_url: order.payment_checkout_url });
   }
 
-  const { data: items, error: itemsError } = await admin
-    .from("order_items")
-    .select("quantity, unit_price_clp, administration_fee_clp, ticket_types!inner(name, events!inner(title))")
-    .eq("order_id", orderId);
-  if (itemsError || !items?.length) {
-    console.error("Could not load order items for payment preference.", itemsError?.message);
+  const [ticketItemsResult, productItemsResult] = await Promise.all([
+    admin
+      .from("order_items")
+      .select("quantity, unit_price_clp, administration_fee_clp, ticket_types!inner(name, events!inner(title))")
+      .eq("order_id", orderId),
+    admin
+      .from("order_product_items")
+      .select("quantity, unit_price_clp, administration_fee_clp, product_name, variant_name")
+      .eq("order_id", orderId),
+  ]);
+  if (ticketItemsResult.error || productItemsResult.error) {
+    console.error("Could not load order items for payment preference.", ticketItemsResult.error?.message ?? productItemsResult.error?.message);
+    return jsonResponse(500, { error: "order_items_lookup_failed" });
+  }
+  const items = ticketItemsResult.data ?? [];
+  const products = productItemsResult.data ?? [];
+  if (!items.length && !products.length) {
+    console.error("Order has no lines for payment preference.", orderId);
     return jsonResponse(500, { error: "order_items_lookup_failed" });
   }
 
   const preferenceBody = {
-    items: items.map((item) => ({
-      title: `${item.ticket_types.events.title} — ${item.ticket_types.name}`.slice(0, 250),
-      quantity: item.quantity,
-      currency_id: "CLP",
-      unit_price: item.unit_price_clp + item.administration_fee_clp,
-    })),
+    items: [
+      ...items.map((item) => ({
+        title: `${item.ticket_types.events.title} — ${item.ticket_types.name}`.slice(0, 250),
+        quantity: item.quantity,
+        currency_id: "CLP",
+        unit_price: item.unit_price_clp + item.administration_fee_clp,
+      })),
+      ...products.map((item) => ({
+        title: `Adicional — ${item.product_name}${item.variant_name ? ` (${item.variant_name})` : ""}`.slice(0, 250),
+        quantity: item.quantity,
+        currency_id: "CLP",
+        unit_price: item.unit_price_clp + item.administration_fee_clp,
+      })),
+    ],
     payer: { email: order.buyer_email },
     external_reference: order.id,
     notification_url: `${supabaseUrl}/functions/v1/mercadopago-webhook`,

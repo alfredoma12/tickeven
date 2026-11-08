@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, LockKeyhole, Ticket } from "lucide-react";
+import { ArrowLeft, ArrowRight, LockKeyhole } from "lucide-react";
 import { signInAccount, signUpAccount } from "../data/producerPortal.js";
+import Brand from "./Brand.jsx";
 
 function isValidRut(value) {
   const rut = value.replace(/[.\s-]/g, "").toUpperCase();
@@ -91,10 +92,7 @@ export default function ProducerAuthPage({ accountType = "producer", onNavigate 
   return (
     <main className="producer-auth-page">
       <header className="producer-auth-header">
-        <a className="brand" href="/" aria-label="TickEven.cl, inicio">
-          <span className="brand__mark"><Ticket size={21} strokeWidth={2.5} /></span>
-          <span>tickeven<span className="brand__dot">.</span>cl</span>
-        </a>
+        <Brand />
         <a href={isAdmin ? "/" : "/productores"}><ArrowLeft size={15} /> {isAdmin ? "Volver al sitio" : "Plataforma TickEven"}</a>
       </header>
       <section className="producer-auth-card" aria-labelledby="producer-auth-title">

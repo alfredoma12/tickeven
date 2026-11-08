@@ -8,6 +8,7 @@ export function getCartLines(cart, events) {
     return event && ticketType
       ? [{
           ...event,
+          kind: "ticket",
           id: item.cartItemId,
           eventId: item.eventId,
           ticketTypeId: ticketType.id,
@@ -22,16 +23,56 @@ export function getCartLines(cart, events) {
   });
 }
 
+export function getCartProductLines(cart, events) {
+  return cart.flatMap((item) => {
+    const event = events.find((candidate) => candidate.id === item.eventId);
+    const product = event?.products.find((candidate) => candidate.id === item.productId);
+    const variant = product?.variants.find((candidate) => candidate.id === item.variantId);
+    if (!event || !product || (item.variantId && !variant)) return [];
+    return [{
+      ...event,
+      kind: "product",
+      id: item.cartItemId,
+      eventId: event.id,
+      productId: product.id,
+      variantId: variant?.id ?? null,
+      productName: product.name,
+      productCategory: product.category,
+      variantName: variant?.name ?? "",
+      image: product.image || event.image,
+      imageAlt: product.name,
+      ticketTypeName: product.name,
+      ticketPrice: product.price,
+      administrationFee: getAdministrationFee(product.price),
+      maxQuantity: Math.min(10, variant?.available ?? product.available),
+      quantity: item.quantity,
+      buyer: item.buyer,
+    }];
+  });
+}
+
 export function getCartTotals(lines) {
-  const ticketSubtotal = lines.reduce((total, item) => total + item.ticketPrice * item.quantity, 0);
-  const administrationTotal = lines.reduce(
+  const ticketLines = lines.filter((item) => item.kind !== "product");
+  const productLines = lines.filter((item) => item.kind === "product");
+  const ticketSubtotal = ticketLines.reduce((total, item) => total + item.ticketPrice * item.quantity, 0);
+  const productSubtotal = productLines.reduce((total, item) => total + item.ticketPrice * item.quantity, 0);
+  const ticketAdministrationTotal = ticketLines.reduce(
     (total, item) => total + item.administrationFee * item.quantity,
     0,
   );
+  const productAdministrationTotal = productLines.reduce(
+    (total, item) => total + item.administrationFee * item.quantity,
+    0,
+  );
+  const administrationTotal = ticketAdministrationTotal + productAdministrationTotal;
   return {
     ticketSubtotal,
+    productSubtotal,
+    ticketAdministrationTotal,
+    productAdministrationTotal,
     administrationTotal,
-    total: ticketSubtotal + administrationTotal,
-    quantity: lines.reduce((total, item) => total + item.quantity, 0),
+    total: ticketSubtotal + productSubtotal + administrationTotal,
+    quantity: ticketLines.reduce((total, item) => total + item.quantity, 0),
+    productQuantity: productLines.reduce((total, item) => total + item.quantity, 0),
   };
 }

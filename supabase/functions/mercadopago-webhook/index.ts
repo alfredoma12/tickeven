@@ -96,10 +96,10 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(502, { error: "payment_lookup_failed" });
   }
   const payment = await paymentResponse.json();
-  if (payment.status !== "approved") return jsonResponse(200, { received: true, processed: false });
 
   const orderId = typeof payment.external_reference === "string" ? payment.external_reference : "";
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId)) {
+    if (payment.status !== "approved") return jsonResponse(200, { received: true, processed: false });
     console.error("Approved Mercado Pago payment has no valid order reference.");
     return jsonResponse(400, { error: "invalid_order_reference" });
   }
@@ -113,9 +113,19 @@ Deno.serve(async (request: Request) => {
     .eq("id", orderId)
     .maybeSingle();
   if (orderError || !order) {
-    console.error("Could not find order for approved payment.", orderError?.message);
+    console.error("Could not find order for Mercado Pago payment.", orderError?.message);
     return jsonResponse(404, { error: "order_not_found" });
   }
+  if (payment.status === "rejected" || payment.status === "cancelled") {
+    const { error: cancelError } = await admin.rpc("cancel_pending_order", { p_order_id: orderId });
+    if (cancelError) {
+      console.error("Could not release inventory for rejected payment.", cancelError.message);
+      return jsonResponse(500, { error: "order_cancellation_failed" });
+    }
+    return jsonResponse(200, { received: true, processed: true, order_cancelled: true });
+  }
+  if (payment.status !== "approved") return jsonResponse(200, { received: true, processed: false });
+
   if (
     payment.currency_id !== "CLP" ||
     Number(payment.transaction_amount) !== Number(order.total_clp) ||
@@ -127,6 +137,14 @@ Deno.serve(async (request: Request) => {
   }
   if (order.status === "paid") {
     if (order.payment_reference === `mp:${paymentId}`) {
+      const { error: financialError } = await admin.from("orders").update({
+        mercadopago_fee_clp: getMercadoPagoFee(payment),
+        mercadopago_net_received_clp: getNetReceived(payment),
+      }).eq("id", orderId);
+      if (financialError) {
+        console.error("Could not save Mercado Pago fee details.", financialError.message);
+        return jsonResponse(500, { error: "payment_financials_save_failed" });
+      }
       return jsonResponse(200, { received: true, processed: true });
     }
     const refundResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}/refunds`, {
@@ -145,16 +163,31 @@ Deno.serve(async (request: Request) => {
     console.error("Refunded duplicate approved payment for already paid order.", paymentId, orderId);
     return jsonResponse(200, { received: true, processed: true, duplicate_refunded: true });
   }
+  if (order.status !== "pending_payment") {
+    const refunded = await refundUnfulfillablePayment(admin, paymentId, order, payment);
+    if (!refunded) return jsonResponse(502, { error: "late_payment_refund_failed" });
+    return jsonResponse(200, { received: true, processed: true, late_payment_refunded: true });
+  }
   if (payment.date_approved && new Date(payment.date_approved).getTime() > new Date(order.expires_at).getTime()) {
     console.error("Approved payment arrived after the order expired.", paymentId, orderId);
-    return jsonResponse(409, { error: "payment_after_order_expiry" });
+    const refunded = await refundUnfulfillablePayment(admin, paymentId, order, payment);
+    if (!refunded) return jsonResponse(502, { error: "late_payment_refund_failed" });
+    return jsonResponse(200, { received: true, processed: true, late_payment_refunded: true });
+  }
+  const { error: financialError } = await admin.from("orders").update({
+    mercadopago_fee_clp: getMercadoPagoFee(payment),
+    mercadopago_net_received_clp: getNetReceived(payment),
+  }).eq("id", orderId).eq("status", "pending_payment");
+  if (financialError) {
+    console.error("Could not save Mercado Pago fee details.", financialError.message);
+    return jsonResponse(500, { error: "payment_financials_save_failed" });
   }
 
   const { data: items, error: itemsError } = await admin
     .from("order_items")
     .select("id, quantity")
     .eq("order_id", orderId);
-  if (itemsError || !items?.length) {
+  if (itemsError) {
     console.error("Could not load items for approved order.", itemsError?.message);
     return jsonResponse(500, { error: "order_items_lookup_failed" });
   }
@@ -170,7 +203,7 @@ Deno.serve(async (request: Request) => {
   }
 
   const tickets = [];
-  for (const item of items) {
+  for (const item of items ?? []) {
     for (let index = 0; index < item.quantity; index += 1) {
       const qrToken = toBase64(crypto.getRandomValues(new Uint8Array(32)))
         .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
@@ -192,7 +225,72 @@ Deno.serve(async (request: Request) => {
   });
   if (completionError) {
     console.error("Could not complete approved Mercado Pago order.", completionError.message);
-    return jsonResponse(500, { error: "ticket_issuance_failed" });
+    const refunded = await refundUnfulfillablePayment(admin, paymentId, order, payment);
+    if (!refunded) return jsonResponse(502, { error: "order_completion_refund_failed" });
+    return jsonResponse(200, { received: true, processed: true, order_refunded: true });
   }
   return jsonResponse(200, { received: true, processed: true });
 });
+
+function getMercadoPagoFee(payment: Record<string, unknown>) {
+  if (!Array.isArray(payment.fee_details)) return null;
+  const amounts = payment.fee_details.map((detail) =>
+    typeof detail === "object" && detail !== null
+      ? Number((detail as Record<string, unknown>).amount)
+      : Number.NaN,
+  );
+  if (amounts.some((amount) => !Number.isFinite(amount) || amount < 0)) return null;
+  return Math.round(amounts.reduce((sum, amount) => sum + amount, 0));
+}
+
+function getNetReceived(payment: Record<string, unknown>) {
+  const transactionDetails = payment.transaction_details;
+  if (typeof transactionDetails !== "object" || transactionDetails === null) return null;
+  const amount = Number((transactionDetails as Record<string, unknown>).net_received_amount);
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount) : null;
+}
+
+async function refundUnfulfillablePayment(
+  admin: ReturnType<typeof createClient>,
+  paymentId: string,
+  order: { id: string; total_clp: number },
+  payment: Record<string, unknown>,
+) {
+  const accessToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
+  if (!accessToken) return false;
+  let response: Response;
+  try {
+    response = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}/refunds`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "X-Idempotency-Key": `tickeven-unfulfillable-refund-${paymentId}`,
+      },
+      body: JSON.stringify({}),
+    });
+  } catch (error) {
+    console.error("Could not connect to Mercado Pago to refund an unfulfillable order.", error);
+    return false;
+  }
+  if (!response.ok) {
+    console.error("Mercado Pago rejected the unfulfillable-order refund.", paymentId, response.status);
+    return false;
+  }
+
+  const { error: cancelError } = await admin.rpc("cancel_pending_order", { p_order_id: order.id });
+  if (cancelError) {
+    console.error("Could not cancel an unfulfillable order after refund.", cancelError.message);
+    return false;
+  }
+  const { error: financialError } = await admin.from("orders").update({
+    refunded_total_clp: order.total_clp,
+    mercadopago_fee_clp: getMercadoPagoFee(payment),
+    mercadopago_net_received_clp: getNetReceived(payment),
+  }).eq("id", order.id);
+  if (financialError) {
+    console.error("Could not save an unfulfillable-order refund.", financialError.message);
+    return false;
+  }
+  return true;
+}

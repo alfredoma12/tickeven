@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { ArrowLeft, ArrowUpRight, Ticket } from "lucide-react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import ProducerLanding from "./ProducerLanding.jsx";
+import Brand from "./Brand.jsx";
 
 export default function ProducerPage() {
   useEffect(() => {
@@ -15,10 +16,7 @@ export default function ProducerPage() {
     <div className="producer-site">
       <header className="producer-site-header">
         <nav className="producer-site-header__inner" aria-label="Navegación de productores">
-          <a className="brand" href="/" aria-label="TickEven.cl, inicio">
-            <span className="brand__mark"><Ticket size={21} strokeWidth={2.5} /></span>
-            <span>tickeven<span className="brand__dot">.</span>cl</span>
-          </a>
+          <Brand />
           <div className="producer-site-header__links">
             <a href="#producer-sales">Ventas</a>
             <a href="#producer-brand">Marca</a>
@@ -35,10 +33,7 @@ export default function ProducerPage() {
         <ProducerLanding />
       </main>
       <footer className="producer-site-footer">
-        <a className="brand" href="/" aria-label="TickEven.cl, inicio">
-          <span className="brand__mark"><Ticket size={19} strokeWidth={2.5} /></span>
-          <span>tickeven<span className="brand__dot">.</span>cl</span>
-        </a>
+        <Brand />
         <span>© 2026 TickEven.cl · Herramientas para eventos.</span>
         <a href="/#eventos">Explorar eventos <ArrowUpRight size={14} /></a>
       </footer>

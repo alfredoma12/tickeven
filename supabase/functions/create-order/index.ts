@@ -48,13 +48,15 @@ Deno.serve(async (request: Request) => {
   const checkoutKey = payload.checkout_key;
   const buyer = payload.buyer as Record<string, unknown> | undefined;
   const items = payload.items;
+  const products = payload.products ?? [];
   if (
     typeof checkoutKey !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(checkoutKey) ||
     !buyer || typeof buyer.name !== "string" ||
     typeof buyer.rut !== "string" || typeof buyer.email !== "string" ||
     typeof buyer.phone !== "string" || !Array.isArray(items) ||
-    items.length < 1 || items.length > 10
+    items.length > 10 || !Array.isArray(products) ||
+    products.length > 20 || (items.length === 0 && products.length === 0)
   ) {
     return jsonResponse(400, { error: "invalid_order" });
   }
@@ -89,6 +91,19 @@ Deno.serve(async (request: Request) => {
       }
     }
   }
+  for (const product of products) {
+    if (
+      typeof product !== "object" || product === null ||
+      typeof product.product_id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product.product_id) ||
+      (product.variant_id !== null && product.variant_id !== undefined &&
+        (typeof product.variant_id !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(product.variant_id))) ||
+      !Number.isInteger(product.quantity) || product.quantity < 1 || product.quantity > 10
+    ) {
+      return jsonResponse(400, { error: "invalid_product_item" });
+    }
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -98,18 +113,19 @@ Deno.serve(async (request: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data, error } = await admin.rpc("create_pending_order", {
+  const { data, error } = await admin.rpc("create_pending_order_with_products", {
     p_checkout_key: checkoutKey,
     p_buyer_name: buyer.name.trim(),
     p_buyer_rut: buyer.rut.trim(),
     p_buyer_email: buyer.email.trim().toLowerCase(),
     p_buyer_phone: buyer.phone.trim(),
     p_items: items,
+    p_products: products,
   });
   if (error) {
     console.error("create_pending_order failed", error.message);
-    const inventoryErrors = new Set(["insufficient_inventory", "ticket_type_unavailable"]);
-    const code = error.message.match(/(?:insufficient_inventory|ticket_type_unavailable|invalid_buyer|invalid_items|invalid_quantity)/)?.[0];
+    const inventoryErrors = new Set(["insufficient_inventory", "ticket_type_unavailable", "insufficient_product_inventory", "product_unavailable", "product_variant_required", "product_variant_unavailable"]);
+    const code = error.message.match(/(?:insufficient_inventory|ticket_type_unavailable|insufficient_product_inventory|product_unavailable|product_variant_required|product_variant_unavailable|invalid_buyer|invalid_items|invalid_quantity)/)?.[0];
     return jsonResponse(inventoryErrors.has(code ?? "") ? 409 : 400, {
       error: code ?? "order_creation_failed",
     });

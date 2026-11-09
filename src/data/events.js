@@ -4,6 +4,7 @@ import { createUUID } from "./site.js";
 const EVENT_SELECT =
   "id, producer_id, slug, title, description, category, venue, city, starts_at, cover_url, gallery_urls, status";
 
+const EXAMPLE_EVENT_IDS = new Set(["1", "2", "3", "4", "5", "6", "7", "8"]);
 const colors = ["lavender", "peach", "blue", "mint"];
 const dateFormatter = new Intl.DateTimeFormat("es-CL", {
   weekday: "short",
@@ -19,6 +20,7 @@ const timeFormatter = new Intl.DateTimeFormat("es-CL", {
 });
 
 function mapEvent(row, index, ticketInventory = [], productInventory = []) {
+  const isExample = row.producer_id === null && EXAMPLE_EVENT_IDS.has(String(row.id));
   const startsAt = new Date(row.starts_at);
   const dateParts = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -27,20 +29,22 @@ function mapEvent(row, index, ticketInventory = [], productInventory = []) {
     timeZone: "America/Santiago",
   }).formatToParts(startsAt);
   const eventDate = `${dateParts.find((part) => part.type === "year").value}-${dateParts.find((part) => part.type === "month").value}-${dateParts.find((part) => part.type === "day").value}`;
-  const ticketTypes = ticketInventory
-    .filter((ticketType) => ticketType.is_active)
-    .map((ticketType) => ({
-      id: ticketType.ticket_type_id,
-      name: ticketType.name,
-      description: ticketType.description,
-      price: ticketType.price_clp,
-      capacity: ticketType.quantity_total,
-      sold: ticketType.quantity_sold,
-      reserved: ticketType.quantity_reserved,
-      available: ticketType.quantity_available,
-    }));
+  const ticketTypes = isExample
+    ? []
+    : ticketInventory
+      .filter((ticketType) => ticketType.is_active)
+      .map((ticketType) => ({
+        id: ticketType.ticket_type_id,
+        name: ticketType.name,
+        description: ticketType.description,
+        price: ticketType.price_clp,
+        capacity: ticketType.quantity_total,
+        sold: ticketType.quantity_sold,
+        reserved: ticketType.quantity_reserved,
+        available: ticketType.quantity_available,
+      }));
   const productsById = new Map();
-  for (const product of productInventory) {
+  for (const product of isExample ? [] : productInventory) {
     let mappedProduct = productsById.get(product.product_id);
     if (!mappedProduct) {
       mappedProduct = {
@@ -82,24 +86,29 @@ function mapEvent(row, index, ticketInventory = [], productInventory = []) {
   return {
     id: row.id,
     producerId: row.producer_id,
-    slug: row.slug,
-    title: row.title,
+    isExample,
+    slug: isExample ? `evento-de-ejemplo-${row.id}` : row.slug,
+    title: isExample ? "Evento de ejemplo" : row.title,
     category: row.category,
-    date: dateFormatter.format(startsAt).replace(/\./g, "").toLocaleUpperCase("es"),
+    date: isExample ? "FECHA POR DEFINIR" : dateFormatter.format(startsAt).replace(/\./g, "").toLocaleUpperCase("es"),
     eventDate,
-    time: timeFormatter.format(startsAt),
-    venue: row.venue,
-    city: row.city,
-    description: row.description,
+    time: isExample ? "Por definir" : timeFormatter.format(startsAt),
+    venue: isExample ? "Tu recinto" : row.venue,
+    city: isExample ? "Tu ciudad" : row.city,
+    description: isExample
+      ? "Esta publicación de demostración muestra cómo se presenta un evento en TickEven. No corresponde a una actividad real y no está disponible para compra."
+      : row.description,
     ticketTypes,
     ticketCapacity: ticketTypes.reduce((sum, ticket) => sum + ticket.capacity, 0),
     ticketsSold: ticketTypes.reduce((sum, ticket) => sum + ticket.sold, 0),
     ticketsReserved: ticketTypes.reduce((sum, ticket) => sum + ticket.reserved, 0),
     ticketsAvailable: ticketTypes.reduce((sum, ticket) => sum + ticket.available, 0),
     products: [...productsById.values()],
-    ticketPrice: Math.min(...ticketTypes.map((ticketType) => ticketType.price)),
+    ticketPrice: ticketTypes.length
+      ? Math.min(...ticketTypes.map((ticketType) => ticketType.price))
+      : null,
     image: row.cover_url,
-    imageAlt: `Fotografía del evento ${row.title}`,
+    imageAlt: isExample ? "Imagen de evento de ejemplo" : `Fotografía del evento ${row.title}`,
     gallery: row.gallery_urls ?? [],
     color: colors[index % colors.length],
     weekend: ["Sat", "Sun"].includes(weekday),

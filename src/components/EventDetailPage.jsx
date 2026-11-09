@@ -170,6 +170,47 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
 
   const gallery = [...new Set([event.image, ...event.gallery])];
 
+  if (event.isExample) {
+    return (
+      <div className="event-detail-shell">
+        <header className="event-detail-header">
+          <nav className="event-detail-header__inner" aria-label="Navegación del evento">
+            <Brand />
+            <a className="event-detail-header__back" href="/"><ArrowLeft size={15} /> Explorar eventos</a>
+          </nav>
+        </header>
+        <main className="event-detail-page">
+          <div className="event-detail-container">
+            <div className="event-example-preview__notice" role="status">
+              <ShieldCheck size={18} />
+              <span>Vista de demostración. Este evento no es real y no está disponible para compra.</span>
+            </div>
+            <section className="event-example-preview">
+              <img src={event.image} alt={event.imageAlt} />
+              <div className="event-example-preview__content">
+                <span className="event-detail-eyebrow">{event.category} <span>·</span> EVENTO DE EJEMPLO</span>
+                <h1>{event.title}</h1>
+                <div className="event-detail-meta">
+                  <span><CalendarDays size={17} /> Fecha y hora por definir</span>
+                  <span><MapPin size={17} /> Tu recinto, tu ciudad</span>
+                </div>
+                <p>{event.description}</p>
+                <div className="event-example-preview__ticket">
+                  <Ticket size={18} />
+                  <div><strong>Tipos de entrada</strong><span>Se mostrarán aquí cuando publiques tu evento.</span></div>
+                  <span>No disponible</span>
+                </div>
+                <a className="event-example-preview__cta" href="/productores">
+                  Publica tu evento en TickEven <ArrowRight size={16} />
+                </a>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="event-detail-shell">
       <header className="event-detail-header">

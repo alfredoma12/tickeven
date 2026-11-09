@@ -1,6 +1,5 @@
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
-import logoAsset from "../../style/tickevenlogo.jpeg";
 
 const colors = {
   blue: [21, 91, 255],
@@ -54,7 +53,7 @@ function formatPurchaseDate(value) {
 
 async function loadLogo() {
   const image = new Image();
-  image.src = logoAsset;
+  image.src = "/tickevenlogo.png";
   await image.decode();
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
@@ -62,7 +61,7 @@ async function loadLogo() {
   const context = canvas.getContext("2d");
   if (!context) throw new Error("No se pudo preparar el logo para la entrada.");
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.94);
+  return canvas.toDataURL("image/png");
 }
 
 function drawBrandGradient(pdf, width, y, height) {
@@ -126,7 +125,7 @@ export async function downloadTicketPdf({ eventTitle, event, tickets, orderId })
     pdf.setFillColor(...colors.surface);
     pdf.rect(0, 0, pageWidth, 53, "F");
     drawBrandGradient(pdf, pageWidth, 51, 2);
-    pdf.addImage(logo, "JPEG", 15, 12, 68, 19.13);
+    pdf.addImage(logo, "PNG", 15, 12, 68, 22.62);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8);
     pdf.setTextColor(...colors.muted);

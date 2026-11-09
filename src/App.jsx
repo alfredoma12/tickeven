@@ -51,260 +51,40 @@ function getBrowserPath(route) {
   return `${appBasePath}${pathname}${url.search}${url.hash}` || "/";
 }
 
-const exampleEventsForMigration = [
-  {
-    id: 1,
-    title: "Festival de música de Santiago",
-    category: "Conciertos",
-    date: "SÁB 07 NOV",
-    time: "12:00",
-    venue: "Parque Cerrillos",
-    city: "Santiago",
-    ticketPrice: 119000,
-    description: "Tres días para disfrutar música en vivo, descubrir nuevos artistas y compartir una experiencia al aire libre en Santiago.",
-    ticketTypes: [
-      { id: "general", name: "Acceso general", description: "Acceso al festival y escenarios principales.", price: 119000, available: 850 },
-      { id: "preferencial", name: "Acceso preferencial", description: "Acceso preferencial y zona de descanso.", price: 159000, available: 180 },
-      { id: "vip", name: "Experiencia VIP", description: "Acceso VIP, vista preferente y atención exclusiva.", price: 219000, available: 60 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Público disfrutando de un concierto en vivo",
-    color: "lavender",
-    weekend: true,
-  },
-  {
-    id: 2,
-    title: "Noche de vinilos: Edición disco",
-    category: "Fiestas",
-    date: "VIE 06 NOV",
-    time: "22:00",
-    venue: "Club Subterráneo",
-    city: "Santiago",
-    ticketPrice: 12000,
-    description: "Una noche para escuchar clásicos en vinilo, bailar y compartir en una pista íntima con selección musical toda la noche.",
-    ticketTypes: [
-      { id: "general", name: "Preventa general", description: "Ingreso a la fiesta desde las 22:00.", price: 12000, available: 200 },
-      { id: "barra-libre", name: "Entrada + bienvenida", description: "Ingreso y un cóctel de bienvenida.", price: 18000, available: 80 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Luces de colores en una pista de baile",
-    color: "peach",
-    weekend: true,
-  },
-  {
-    id: 3,
-    title: "El lago de los cisnes",
-    category: "Teatro",
-    date: "SÁB 07 NOV",
-    time: "19:30",
-    venue: "Teatro Municipal",
-    city: "Santiago",
-    ticketPrice: 18000,
-    description: "El clásico ballet de Tchaikovsky vuelve al escenario en una puesta en escena que reúne danza, música en vivo y una producción inolvidable.",
-    ticketTypes: [
-      { id: "balcon", name: "Balcón", description: "Ubicación en balcón del teatro.", price: 18000, available: 90 },
-      { id: "platea", name: "Platea", description: "Ubicación en platea central.", price: 32000, available: 70 },
-      { id: "palco", name: "Palco preferencial", description: "Ubicación preferente con vista al escenario.", price: 45000, available: 24 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1503095396549-807759245b35?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1507676184212-d03ab07a01bf?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1503095396549-807759245b35?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Bailarina en escena bajo luces cálidas",
-    color: "blue",
-    weekend: true,
-  },
-  {
-    id: 4,
-    title: "Maratón de Santiago 2026",
-    category: "Deportes",
-    date: "DOM 06 DIC",
-    time: "07:00",
-    venue: "Plaza de la Ciudadanía",
-    city: "Santiago",
-    ticketPrice: 25000,
-    description: "Corre por las calles de Santiago y elige tu desafío. La inscripción incluye número de corredor, hidratación y acceso a la zona de llegada.",
-    ticketTypes: [
-      { id: "10k", name: "Corrida 10K", description: "Inscripción individual para el circuito de 10 kilómetros.", price: 25000, available: 500 },
-      { id: "21k", name: "Media maratón 21K", description: "Inscripción individual para el circuito de 21 kilómetros.", price: 35000, available: 300 },
-      { id: "42k", name: "Maratón 42K", description: "Inscripción individual para el circuito de 42 kilómetros.", price: 45000, available: 200 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1452626038306-9aae5e071dd3?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1533561052604-c3beb6d55b8d?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1533561052604-c3beb6d55b8d?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Corredores participando en una carrera urbana",
-    color: "mint",
-    weekend: false,
-  },
-  {
-    id: 5,
-    title: "Aventura bajo las estrellas",
-    category: "Familia",
-    date: "SÁB 07 NOV",
-    time: "18:00",
-    venue: "Planetario USACH",
-    city: "Santiago",
-    ticketPrice: 8500,
-    description: "Una aventura familiar para explorar el universo, conocer sus misterios y vivir una función inmersiva bajo las estrellas.",
-    ticketTypes: [
-      { id: "general", name: "Entrada general", description: "Acceso a una función para una persona.", price: 8500, available: 150 },
-      { id: "familiar", name: "Pack familiar", description: "Cuatro entradas para compartir la experiencia.", price: 28000, available: 45 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Cielo estrellado lleno de galaxias",
-    color: "lavender",
-    weekend: true,
-  },
-  {
-    id: 6,
-    title: "Ideas que mueven el futuro",
-    category: "Conferencias",
-    date: "JUE 12 NOV",
-    time: "09:00",
-    venue: "Centro GAM",
-    city: "Santiago",
-    ticketPrice: 15000,
-    description: "Una jornada de ideas, conversaciones y herramientas para quienes están construyendo el futuro desde distintas disciplinas.",
-    ticketTypes: [
-      { id: "general", name: "Asistente general", description: "Acceso a todas las charlas y espacios comunes.", price: 15000, available: 250 },
-      { id: "estudiante", name: "Estudiante", description: "Acceso con acreditación estudiantil vigente.", price: 9000, available: 100 },
-      { id: "premium", name: "Experiencia completa", description: "Acceso, coffee break y material del encuentro.", price: 28000, available: 60 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1475721027785-f74eccf877e2?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Auditorio durante una charla en vivo",
-    color: "peach",
-    weekend: false,
-  },
-  {
-    id: 7,
-    title: "Babasónicos en Viña",
-    category: "Conciertos",
-    date: "SÁB 28 NOV",
-    time: "21:00",
-    venue: "Quinta Vergara",
-    city: "Viña del Mar",
-    ticketPrice: 32000,
-    description: "Babasónicos llega a la Quinta Vergara con un show en vivo para cantar sus canciones favoritas en una noche frente al mar.",
-    ticketTypes: [
-      { id: "galeria", name: "Galería", description: "Ubicación en galería.", price: 32000, available: 400 },
-      { id: "preferencial", name: "Platea preferencial", description: "Ubicación preferencial frente al escenario.", price: 58000, available: 180 },
-      { id: "premium", name: "Experiencia premium", description: "Ubicación premium y acceso prioritario.", price: 85000, available: 60 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Escenario iluminado durante un show musical",
-    color: "blue",
-    weekend: false,
-  },
-  {
-    id: 8,
-    title: "Festival de sabores del sur",
-    category: "Familia",
-    date: "DOM 29 NOV",
-    time: "12:00",
-    venue: "Parque Bicentenario",
-    city: "Santiago",
-    ticketPrice: 6000,
-    description: "Un encuentro para probar sabores, conocer productores locales y disfrutar un día al aire libre con actividades para toda la familia.",
-    ticketTypes: [
-      { id: "general", name: "Entrada general", description: "Acceso al festival durante toda la jornada.", price: 6000, available: 600 },
-      { id: "degustacion", name: "Entrada + degustación", description: "Acceso y selección de degustaciones de bienvenida.", price: 12000, available: 200 },
-    ],
-    gallery: [
-      "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&fit=crop&w=1100&q=85",
-      "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=1100&q=85",
-    ],
-    image:
-      "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=960&q=85",
-    imageAlt: "Mesa con una variedad de platos para compartir",
-    color: "mint",
-    weekend: false,
-  },
-];
-
 const slides = [
   {
-    eyebrow: "EL PLAN DEL MES",
-    title: "La música\nse vive juntos.",
-    description: "Tres días para cantar, descubrir y sentirlo todo.",
-    name: "Festival de música de Santiago",
-    date: "06 — 08 NOVIEMBRE · PARQUE CERRILLOS",
+    eyebrow: "UN ESPACIO PARA TU PRÓXIMO EVENTO",
+    title: "Tu evento\npodría estar acá.",
+    description: "Publica tu evento y configura sus entradas desde tu espacio de productor.",
+    name: "Conciertos · Festivales · Experiencias",
+    date: "TU PRÓXIMA HISTORIA COMIENZA AQUÍ",
     image:
       "https://images.unsplash.com/photo-1506157786151-b8491531f063?auto=format&fit=crop&w=2000&q=90",
-    imageAlt: "Multitud en un festival de música al aire libre",
-    eventId: 1,
+    imageAlt: "Escenario y público en un festival de música",
   },
   {
-    eyebrow: "UNA NOCHE PARA RECORDAR",
-    title: "El escenario\nes todo tuyo.",
-    description: "Vuelve a encontrarte con la música en vivo.",
-    name: "Babasónicos en Viña",
-    date: "28 NOVIEMBRE · QUINTA VERGARA",
+    eyebrow: "TU IDEA TAMBIÉN PUEDE SER LA PRÓXIMA",
+    title: "Tu evento\npodría estar acá.",
+    description: "Consulta las entradas vendidas, reservas y disponibilidad desde tu dashboard.",
+    name: "Entradas · Inventario · Reportes",
+    date: "LA INFORMACIÓN DE TU EVENTO, EN UN MISMO LUGAR",
     image:
       "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=2000&q=90",
-    imageAlt: "Concierto en vivo con el público levantando las manos",
-    eventId: 7,
+    imageAlt: "Concierto en vivo con luces sobre el escenario",
   },
   {
-    eyebrow: "TU PRÓXIMA HISTORIA",
-    title: "Sal de la rutina.\nEntra en escena.",
-    description: "Una noche distinta te está esperando.",
-    name: "El lago de los cisnes",
-    date: "07 NOVIEMBRE · TEATRO MUNICIPAL",
+    eyebrow: "DE LA PUBLICACIÓN AL ACCESO",
+    title: "Tu evento\npodría estar acá.",
+    description: "Agrega productos, ofrece entradas gratuitas y valida accesos con QR.",
+    name: "Entradas · Productos · Validación QR",
+    date: "HERRAMIENTAS PARA CADA ETAPA DEL EVENTO",
     image:
       "https://images.unsplash.com/photo-1503095396549-807759245b35?auto=format&fit=crop&w=2000&q=90",
-    imageAlt: "Ballet clásico sobre el escenario de un teatro",
-    eventId: 3,
+    imageAlt: "Escenario de teatro preparado para una presentación",
   },
 ];
 
 const money = new Intl.NumberFormat("es-CL");
-
-if (exampleEventsForMigration.some((event) =>
-  !Number.isSafeInteger(event.ticketPrice) ||
-  event.ticketPrice <= 0 ||
-  !Array.isArray(event.ticketTypes) ||
-  event.ticketTypes.length === 0 ||
-  event.ticketTypes.some((ticketType) =>
-    !ticketType.id ||
-    !ticketType.name ||
-    !Number.isSafeInteger(ticketType.price) ||
-    ticketType.price <= 0 ||
-    !Number.isInteger(ticketType.available) ||
-    ticketType.available < 0
-  )
-)) {
-  throw new Error("Cada evento debe tener tipos de entrada con precios y disponibilidad válidos.");
-}
 
 function eventSlug(event) {
   if (event.slug) return event.slug;
@@ -317,7 +97,9 @@ function eventSlug(event) {
 }
 
 function EventCard({ event, onBuy, onFavorite, favorite }) {
-  const startingPrice = Math.min(...event.ticketTypes.map((ticketType) => ticketType.price));
+  const startingPrice = event.ticketTypes.length
+    ? Math.min(...event.ticketTypes.map((ticketType) => ticketType.price))
+    : null;
 
   return (
     <article className="event-card">
@@ -327,6 +109,7 @@ function EventCard({ event, onBuy, onFavorite, favorite }) {
         aria-label={`Ver detalles de ${event.title}`}
       >
         <img className="event-card__image" src={event.image} alt={event.imageAlt} loading="lazy" />
+        {event.isExample && <span className="event-card__example-badge">EVENTO DE EJEMPLO</span>}
         <span className={`event-card__category event-card__category--${event.color}`}>
           {event.category}
         </span>
@@ -342,7 +125,7 @@ function EventCard({ event, onBuy, onFavorite, favorite }) {
       </button>
       <div className="event-card__content">
         <p className="event-card__date">
-          {event.date} <span>·</span> {event.time}
+          {event.isExample ? "FECHA POR DEFINIR · EJEMPLO" : <>{event.date} <span>·</span> {event.time}</>}
         </p>
         <h3 className="event-card__title"><a href={`/evento/${eventSlug(event)}`}>{event.title}</a></h3>
         <p className="event-card__venue">
@@ -351,13 +134,17 @@ function EventCard({ event, onBuy, onFavorite, favorite }) {
         </p>
         <div className="event-card__bottom">
           <div className="event-card__price">
-            <p>Desde <strong>{startingPrice === 0 ? "Gratis" : `$${money.format(startingPrice)}`}</strong></p>
-            <p>{startingPrice === 0
-              ? "Sin cargo de administración"
-              : <>Administración ({ADMINISTRATION_PERCENTAGE}) <strong>${money.format(getAdministrationFee(startingPrice))}</strong></>}</p>
+            <p>{event.isExample
+              ? <strong>Precios de referencia</strong>
+              : <>Desde <strong>{startingPrice === 0 ? "Gratis" : `$${money.format(startingPrice)}`}</strong></>}</p>
+            <p>{event.isExample
+              ? "Muestra visual · no disponible para compra"
+              : startingPrice === 0
+                ? "Sin cargo de administración"
+                : <>Administración ({ADMINISTRATION_PERCENTAGE}) <strong>${money.format(getAdministrationFee(startingPrice))}</strong></>}</p>
           </div>
           <button className="event-card__buy" type="button" onClick={() => onBuy(event)}>
-            Ver entradas <ArrowUpRight size={15} aria-hidden="true" />
+            {event.isExample ? "Ver ejemplo" : "Ver entradas"} <ArrowUpRight size={15} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -378,7 +165,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
     const query = search.trim().toLocaleLowerCase("es");
     return events.filter((event) => {
       const matchesCategory = category === "Todos" || event.category === category;
-      const matchesCity = city === "Todas las ciudades" || event.city === city;
+      const matchesCity = event.isExample || city === "Todas las ciudades" || event.city === city;
       const matchesSearch =
         !query ||
         `${event.title} ${event.category} ${event.venue} ${event.city}`
@@ -499,9 +286,9 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
               <button
                 className="hero__cta"
                 type="button"
-                onClick={() => handleBuy(events.find((event) => event.id === String(currentSlide.eventId)))}
+                onClick={() => onNavigate("/productores")}
               >
-                Encuentra tus entradas <ArrowUpRight size={17} />
+                Conoce TickEven para productores <ArrowUpRight size={17} />
               </button>
             </div>
             <div className="hero__controls">

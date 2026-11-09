@@ -18,6 +18,8 @@ Con Supabase CLI instalado y el proyecto creado:
 ```powershell
 npx supabase login
 npx supabase link --project-ref TU_PROJECT_REF
+npx supabase migration list
+npx supabase db push --dry-run
 npx supabase db push
 npx supabase secrets set APP_ORIGIN=https://tickeven.cl APP_PUBLIC_URL=https://tickeven.cl
 npx supabase functions deploy create-order
@@ -35,7 +37,8 @@ npx supabase functions deploy get-order-tickets
 1. Aplica la migración del catálogo y bucket:
 
    ```powershell
-   npx supabase db push --remote
+   npx supabase db push --dry-run
+   npx supabase db push
    ```
 
 2. Despliega las funciones y configura el origen y URL base del dominio oficial:
@@ -65,7 +68,7 @@ npx supabase functions deploy get-order-tickets
    GitHub Pages debe tener `tickeven.cl` como Custom domain; con ambos hosts configurados, Pages redirige `www` al dominio canónico. Espera la propagación DNS, verifica el dominio en Settings → Pages y activa **Enforce HTTPS** cuando el certificado esté disponible.
 6. Para evitar respuestas HTTP `404` al abrir o recargar rutas como `/colaboradores/login`, crea en Cloudflare una regla **Rules → Transform Rules → URL Rewrite** para el host `tickeven.cl`:
 
-   - Expresión: `http.host eq "tickeven.cl" and http.request.uri.path ne "/" and not starts_with(http.request.uri.path, "/assets/") and http.request.uri.path ne "/favicon.svg" and http.request.uri.path ne "/robots.txt" and http.request.uri.path ne "/sitemap.xml" and http.request.uri.path ne "/CNAME" and http.request.uri.path ne "/404.html"`
+   - Expresión: `http.host eq "tickeven.cl" and http.request.uri.path ne "/" and not starts_with(http.request.uri.path, "/assets/") and http.request.uri.path ne "/tickevenlogo.png" and http.request.uri.path ne "/favicon.svg" and http.request.uri.path ne "/robots.txt" and http.request.uri.path ne "/sitemap.xml" and http.request.uri.path ne "/CNAME" and http.request.uri.path ne "/404.html"`
    - Reescribe la ruta a `/index.html` y conserva la query string.
 
    Así Cloudflare entrega el shell de la SPA con HTTP 200 para rutas internas, sin alterar la ruta que ve el navegador. El fallback `404.html` del workflow permanece como respaldo si se accede a GitHub Pages sin pasar por esta regla.
@@ -86,7 +89,7 @@ npx supabase functions deploy get-order-tickets
   ```
 
   No uses una clave fija como `1234` ni guardes credenciales administrativas en el frontend. La autenticación se verifica con Supabase Auth y los permisos con el rol del perfil.
-- La migración `20261105020000_account_approval_and_staff.sql` incorpora las aprobaciones, asignaciones y autorización de validación; ya está aplicada en el proyecto de producción enlazado. Para futuras migraciones, revísalas con `npx supabase db push --remote --dry-run` y solicita confirmación antes de aplicarlas.
+- La migración `20261105020000_account_approval_and_staff.sql` incorpora las aprobaciones, asignaciones y autorización de validación; ya está aplicada en el proyecto de producción enlazado. Para futuras migraciones, revisa el estado con `npx supabase migration list`, previsualiza con `npx supabase db push --dry-run` y confirma las migraciones pendientes antes de ejecutar `npx supabase db push`.
 - La migración `20261105030000_fix_chilean_rut_validation.sql` corrige la validación del RUT en el alta de usuarios para evitar que el trigger de perfil rechace RUT válidos.
 - **Mercado Pago Checkout Pro** es el método de pago integrado. El comprador paga en Mercado Pago y vuelve a TickEven; solo el webhook firmado del servidor confirma el pago y emite entradas. El navegador nunca recibe el Access Token ni puede marcar órdenes como pagadas.
 - Los productores pueden publicar tipos de entrada gratuitos con precio `$0`. En la ficha del evento, la persona registra sus datos y recibe sus entradas QR sin pasar por el carrito ni Mercado Pago. La emisión valida disponibilidad en el servidor y requiere `TICKET_CREDENTIALS_ENCRYPTION_KEY`, igual que la entrega de entradas pagadas.

@@ -28,7 +28,7 @@ import { getCartLines, getCartProductLines, getCartTotals } from "./data/cart.js
 import { fetchPublishedEvents, publishProducerEvent } from "./data/events.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "./data/pricing.js";
 import { APP_URL, createUUID } from "./data/site.js";
-import { registerFreeOrder } from "./data/supabase.js";
+import { registerFreeOrder, validateDiscountCode } from "./data/supabase.js";
 
 const categories = ["Todos", "Conciertos", "Fiestas", "Festivales", "Experiencias", "Teatro", "Deportes", "Familia", "Conferencias"];
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -450,6 +450,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
 function App() {
   const [cart, setCart] = useState([]);
   const [productCart, setProductCart] = useState([]);
+  const [discountCoupon, setDiscountCoupon] = useState(null);
   const [publishedEvents, setPublishedEvents] = useState([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventsError, setEventsError] = useState("");
@@ -462,19 +463,74 @@ function App() {
   const totals = useMemo(() => getCartTotals(lines), [lines]);
 
   useEffect(() => {
+    if (
+      discountCoupon &&
+      !lines.some((line) => line.kind !== "product" && line.eventId === discountCoupon.event_id)
+    ) {
+      setDiscountCoupon(null);
+    }
+  }, [discountCoupon, lines]);
+
+  useEffect(() => {
     const canonicalUrl = new URL(path, APP_URL);
     canonicalUrl.search = "";
     canonicalUrl.hash = "";
-    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonicalUrl.toString());
-    document.querySelector('meta[property="og:url"]')?.setAttribute("content", canonicalUrl.toString());
+    const description = document.querySelector('meta[name="description"]');
+    const openGraphTitle = document.querySelector('meta[property="og:title"]');
+    const openGraphDescription = document.querySelector('meta[property="og:description"]');
+    const openGraphImage = document.querySelector('meta[property="og:image"]');
+    const openGraphImageAlt = document.querySelector('meta[property="og:image:alt"]');
+    const twitterTitle = document.querySelector('meta[name="twitter:title"]');
+    const twitterDescription = document.querySelector('meta[name="twitter:description"]');
+    const twitterImage = document.querySelector('meta[name="twitter:image"]');
+    const defaultTitle = "TickEven.cl | Entradas para conciertos y eventos en Chile";
+    const defaultDescription = "Encuentra entradas para conciertos, fiestas, festivales y experiencias en Chile. Compra fácil, paga seguro y lleva tus tickets digitales en TickEven.";
+    const defaultImage = `${APP_URL}/tickevenlogo.png`;
+    const routeEvent = path.startsWith("/evento/")
+      ? allEvents.find((event) => eventSlug(event) === path.slice("/evento/".length))
+      : null;
+    let title = defaultTitle;
+    let pageDescription = defaultDescription;
+    let pageImage = defaultImage;
     const privateRoute = /^\/(admin|colaboradores)(\/|$)/.test(path) ||
       /^\/productores\/(login|dashboard)(\/|$)/.test(path) ||
       /^\/(carrito|checkout)(\/|$)/.test(path);
+
+    if (path === "/productores") {
+      title = "Plataforma para productores de eventos | TickEven.cl";
+      pageDescription = "Publica y gestiona tus eventos con TickEven: vende entradas, agrega productos, controla inventario y revisa tus ventas desde un solo dashboard.";
+    } else if (path.startsWith("/evento/")) {
+      if (routeEvent && !routeEvent.isExample) {
+        title = `${routeEvent.title} | Entradas en TickEven.cl`;
+        pageDescription = `${routeEvent.title}: ${routeEvent.category} en ${routeEvent.city}. ${routeEvent.description}`
+          .replace(/\s+/g, " ")
+          .slice(0, 160);
+        pageImage = routeEvent.image || defaultImage;
+      } else {
+        title = routeEvent ? "Evento de ejemplo | TickEven.cl" : "Evento no encontrado | TickEven.cl";
+      }
+    }
+
+    document.title = title;
+    document.querySelector('link[rel="canonical"]')?.setAttribute("href", canonicalUrl.toString());
+    document.querySelector('meta[property="og:url"]')?.setAttribute("content", canonicalUrl.toString());
     document.querySelector('meta[name="robots"]')?.setAttribute(
       "content",
-      privateRoute ? "noindex,nofollow" : "index,follow",
+      privateRoute || (path.startsWith("/evento/") && (!routeEvent || routeEvent.isExample))
+        ? "noindex,nofollow"
+        : "index,follow",
     );
-  }, [path]);
+    description?.setAttribute("content", pageDescription);
+    openGraphTitle?.setAttribute("content", title);
+    openGraphDescription?.setAttribute("content", pageDescription);
+    openGraphImage?.setAttribute("content", pageImage);
+    openGraphImageAlt?.setAttribute("content", routeEvent && !routeEvent.isExample
+      ? `Imagen de ${routeEvent.title}`
+      : "TickEven, plataforma de entradas para eventos en Chile");
+    twitterTitle?.setAttribute("content", title);
+    twitterDescription?.setAttribute("content", pageDescription);
+    twitterImage?.setAttribute("content", pageImage);
+  }, [path, allEvents]);
 
   useEffect(() => {
     let active = true;
@@ -579,6 +635,15 @@ function App() {
     setProductCart((current) => current.filter((item) => item.cartItemId !== cartItemId));
   };
 
+  const applyDiscount = async (code) => {
+    const coupon = await validateDiscountCode(code);
+    if (!lines.some((line) => line.kind !== "product" && line.eventId === coupon.event_id)) {
+      throw new Error("Este código no aplica a las entradas de los eventos de tu carrito.");
+    }
+    setDiscountCoupon(coupon);
+    return coupon;
+  };
+
   const handlePublishEvent = async (event) => {
     const savedEvent = await publishProducerEvent(event);
     setPublishedEvents((current) => [savedEvent, ...current]);
@@ -620,9 +685,24 @@ function App() {
     return <EventDetailPage event={event} cartCount={totals.quantity + totals.productQuantity} onAddToCart={addToCart} onFreeRegister={handleFreeRegistration} onNavigate={navigate} />;
   }
   if (path === "/carrito") {
-    return <CartPage lines={lines} totals={totals} onUpdateQuantity={updateQuantity} onRemove={removeFromCart} onNavigate={navigate} />;
+    return <CartPage
+      lines={lines}
+      totals={getCartTotals(lines, discountCoupon)}
+      discountCoupon={discountCoupon}
+      onApplyDiscount={applyDiscount}
+      onClearDiscount={() => setDiscountCoupon(null)}
+      onUpdateQuantity={updateQuantity}
+      onRemove={removeFromCart}
+      onNavigate={navigate}
+    />;
   }
-  if (path === "/checkout") return <CheckoutPage lines={lines} totals={totals} />;
+  if (path === "/checkout") {
+    return <CheckoutPage
+      lines={lines}
+      totals={getCartTotals(lines, discountCoupon)}
+      discountCoupon={discountCoupon}
+    />;
+  }
 
   return <HomePage cartCount={totals.quantity + totals.productQuantity} events={allEvents} loading={eventsLoading} error={eventsError} onNavigate={navigate} />;
 }

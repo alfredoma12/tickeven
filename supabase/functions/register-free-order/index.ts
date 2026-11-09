@@ -74,13 +74,15 @@ Deno.serve(async (request: Request) => {
   const checkoutKey = payload.checkout_key;
   const buyer = payload.buyer as Record<string, unknown> | undefined;
   const items = payload.items;
+  const discountCode = payload.discount_code ?? null;
   if (
     typeof checkoutKey !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(checkoutKey) ||
     !buyer || typeof buyer.name !== "string" ||
     typeof buyer.rut !== "string" || typeof buyer.email !== "string" ||
     typeof buyer.phone !== "string" || !Array.isArray(items) ||
-    items.length < 1 || items.length > 10
+    items.length < 1 || items.length > 10 ||
+    (discountCode !== null && (typeof discountCode !== "string" || discountCode.length > 32))
   ) {
     return jsonResponse(400, { error: "invalid_order" });
   }
@@ -123,22 +125,33 @@ Deno.serve(async (request: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data, error } = await admin.rpc("create_free_order", {
+  const normalizedDiscountCode = typeof discountCode === "string" ? discountCode.trim().toUpperCase() : "";
+  const rpcName = normalizedDiscountCode
+    ? "create_free_order_with_discount"
+    : "create_free_order";
+  const rpcArguments = {
     p_checkout_key: checkoutKey,
     p_buyer_name: buyer.name.trim(),
     p_buyer_rut: buyer.rut.trim(),
     p_buyer_email: buyer.email.trim().toLowerCase(),
     p_buyer_phone: buyer.phone.trim(),
     p_items: items,
-  });
+    ...(rpcName === "create_free_order_with_discount"
+      ? { p_discount_code: normalizedDiscountCode }
+      : {}),
+  };
+  const { data, error } = await admin.rpc(rpcName, rpcArguments);
   if (error) {
     console.error("create_free_order failed", error.message);
     const code = error.message.match(
-      /(?:insufficient_inventory|ticket_type_unavailable|invalid_buyer|invalid_items|invalid_quantity|order_not_free)/,
+      /(?:insufficient_inventory|ticket_type_unavailable|invalid_buyer|invalid_items|invalid_quantity|order_not_free|discount_code_invalid|discount_code_inactive|discount_code_expired|discount_code_limit_reached|discount_code_event_mismatch|discount_code_unavailable|discount_code_already_applied|order_not_payable)/,
     )?.[0] ?? "free_order_creation_failed";
-    return jsonResponse(code === "insufficient_inventory" || code === "ticket_type_unavailable" ? 409 : 400, {
+    return jsonResponse(
+      code === "insufficient_inventory" || code === "ticket_type_unavailable" || code === "discount_code_limit_reached" ? 409 : 400,
+      {
       error: code,
-    });
+      },
+    );
   }
 
   const order = Array.isArray(data) ? data[0] : data;

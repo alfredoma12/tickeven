@@ -11,11 +11,11 @@ import {
 import { PurchaseSummary } from "./CartPage.jsx";
 import { ADMINISTRATION_PERCENTAGE } from "../data/pricing.js";
 import { createUUID } from "../data/site.js";
-import { createMercadoPagoPreference, createPendingOrder, getPaidOrderTickets } from "../data/supabase.js";
+import { createMercadoPagoPreference, createPendingOrder, getPaidOrderTickets, registerFreeOrder } from "../data/supabase.js";
 
 const money = new Intl.NumberFormat("es-CL");
 
-export default function CheckoutPage({ lines, totals }) {
+export default function CheckoutPage({ lines, totals, discountCoupon }) {
   const [checkoutError, setCheckoutError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutKey] = useState(createUUID);
@@ -185,8 +185,23 @@ export default function CheckoutPage({ lines, totals }) {
                   checkoutKey,
                   lines: ticketLines,
                   products: productLines,
+                  discountCode: discountCoupon?.code,
                 });
                 window.sessionStorage.setItem(`tickeven:checkout:${createdOrder.id}`, checkoutKey);
+                if (createdOrder.total_clp === 0) {
+                  const buyer = ticketLines[0]?.buyer;
+                  if (!buyer || productLines.length) {
+                    throw new Error("No pudimos preparar esta inscripción gratuita. Vuelve al carrito e inténtalo otra vez.");
+                  }
+                  const freeOrder = await registerFreeOrder({
+                    checkoutKey,
+                    buyer,
+                    items: ticketLines,
+                    discountCode: discountCoupon?.code,
+                  });
+                  window.location.assign(`/checkout?payment=free&order_id=${freeOrder.id}`);
+                  return;
+                }
                 const preference = await createMercadoPagoPreference({ orderId: createdOrder.id, checkoutKey });
                 window.location.assign(preference.checkout_url);
               } catch (error) {
@@ -225,7 +240,7 @@ export default function CheckoutPage({ lines, totals }) {
                 </div>
               ))}
             </div>
-            <PurchaseSummary totals={totals} hideAction note="El total final se calcula nuevamente en el servidor." />
+            <PurchaseSummary totals={totals} hideAction note="El total final y cualquier descuento se validan nuevamente en el servidor." />
             <a className="checkout-order__edit" href="/carrito"><ArrowLeft size={13} /> Editar carrito</a>
           </aside>
         </div>

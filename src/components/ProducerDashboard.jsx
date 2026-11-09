@@ -43,6 +43,12 @@ function formatEventDate(value) {
     .toLocaleUpperCase("es");
 }
 
+function getEventStatusLabel(status) {
+  if (status === "archived") return "Retirado";
+  if (status === "draft") return "Borrador";
+  return "Publicado";
+}
+
 function getLocalDateInputValue() {
   const date = new Date();
   const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -98,22 +104,22 @@ function OverviewTab({ events, onCreate }) {
         <button className="producer-dashboard-primary" type="button" onClick={onCreate}><Plus size={17} /> Crear evento</button>
       </div>
       <div className="producer-dashboard-stats">
-        <article><span>EVENTOS PUBLICADOS</span><strong>{events.length}</strong><small>Experiencias en tu cuenta</small></article>
+        <article><span>EVENTOS ACTIVOS</span><strong>{events.filter((event) => event.status === "published").length}</strong><small>Experiencias publicadas en tu cuenta</small></article>
         <article><span>ENTRADAS VENDIDAS</span><strong>{money.format(ticketTotals.sold)}</strong><small>Reservadas temporalmente: {money.format(ticketTotals.reserved)}</small></article>
         <article><span>DISPONIBLES</span><strong>{money.format(ticketTotals.available)}</strong><small>De {money.format(ticketTotals.capacity)} entradas publicadas</small></article>
         <article><span>ADMINISTRACIÓN</span><strong>{ADMINISTRATION_PERCENTAGE}</strong><small>Sobre el precio de cada entrada</small></article>
       </div>
       <div className="producer-dashboard-list-card">
-        <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">TU AGENDA</span><h3>Eventos publicados</h3></div><button type="button" onClick={onCreate}>Nuevo evento <ArrowRight size={14} /></button></div>
+        <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">TU AGENDA</span><h3>Tus eventos</h3></div><button type="button" onClick={onCreate}>Nuevo evento <ArrowRight size={14} /></button></div>
         {events.length ? (
           <div className="producer-dashboard-events">
             {events.slice(0, 5).map((event) => (
-              <a className="producer-dashboard-event-row" href={`/evento/${event.slug}`} key={event.id}>
+              <div className="producer-dashboard-event-row" key={event.id}>
                 <img src={event.image} alt="" />
-                <span><strong>{event.title}</strong><small>{event.date} · {event.venue}, {event.city}</small></span>
-                <span className="producer-dashboard-event-row__status"><i /> Publicado</span>
+                <span><strong>{event.status === "published" ? <a href={`/evento/${event.slug}`}>{event.title}</a> : event.title}</strong><small>{event.date} · {event.venue}, {event.city}</small></span>
+                <span className={`producer-dashboard-event-row__status${event.status === "published" ? "" : " is-archived"}`}><i /> {getEventStatusLabel(event.status)}</span>
                 <ArrowRight size={16} />
-              </a>
+              </div>
             ))}
           </div>
         ) : (
@@ -135,12 +141,12 @@ function EventsTab({ events, onCreate }) {
         {events.length ? (
           <div className="producer-dashboard-events">
             {events.map((event) => (
-              <a className="producer-dashboard-event-row" href={`/evento/${event.slug}`} key={event.id}>
+              <div className="producer-dashboard-event-row" key={event.id}>
                 <img src={event.image} alt="" />
-                <span><strong>{event.title}</strong><small>{event.date} · {event.venue}, {event.city}</small></span>
-                <span className="producer-dashboard-event-row__status"><i /> Publicado · {money.format(event.ticketsAvailable)} disponibles</span>
+                <span><strong>{event.status === "published" ? <a href={`/evento/${event.slug}`}>{event.title}</a> : event.title}</strong><small>{event.date} · {event.venue}, {event.city}</small></span>
+                <span className={`producer-dashboard-event-row__status${event.status === "published" ? "" : " is-archived"}`}><i /> {getEventStatusLabel(event.status)} · {money.format(event.ticketsAvailable)} disponibles</span>
                 <ArrowRight size={16} />
-              </a>
+              </div>
             ))}
           </div>
         ) : (
@@ -683,6 +689,178 @@ function SalesTab({ events }) {
   );
 }
 
+function DiscountCouponsTab({ events }) {
+  const [coupons, setCoupons] = useState([]);
+  const [eventId, setEventId] = useState("");
+  const [code, setCode] = useState("");
+  const [discountType, setDiscountType] = useState("percent");
+  const [discountPercent, setDiscountPercent] = useState("10");
+  const [maxUses, setMaxUses] = useState("");
+  const [expiresAt, setExpiresAt] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState("");
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const availableEvents = events.filter((event) => event.status === "published");
+
+  useEffect(() => {
+    setEventId((current) => availableEvents.some((event) => event.id === current)
+      ? current
+      : availableEvents[0]?.id ?? "");
+  }, [events]);
+
+  useEffect(() => {
+    let active = true;
+    requireSupabase()
+      .from("event_discount_coupons")
+      .select("id, event_id, code, discount_type, discount_percent, max_uses, expires_at, is_active, created_at")
+      .order("created_at", { ascending: false })
+      .then(({ data, error: queryError }) => {
+        if (queryError) throw queryError;
+        if (active) setCoupons(data ?? []);
+      })
+      .catch((queryError) => {
+        console.error("No se pudieron cargar los códigos de descuento.", queryError);
+        if (active) setError(queryError.message || "No se pudieron cargar tus códigos.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const createCoupon = async (event) => {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    const normalizedCode = code.trim().toUpperCase();
+    if (!/^[A-Z0-9_-]{3,32}$/.test(normalizedCode)) {
+      setError("Usa entre 3 y 32 caracteres: letras, números, guion o guion bajo.");
+      return;
+    }
+    setBusyId("create");
+    try {
+      const { data, error: insertError } = await requireSupabase()
+        .from("event_discount_coupons")
+        .insert({
+          event_id: eventId,
+          code: normalizedCode,
+          discount_type: discountType,
+          discount_percent: discountType === "percent" ? Number(discountPercent) : null,
+          max_uses: maxUses ? Number(maxUses) : null,
+          expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+        })
+        .select("id, event_id, code, discount_type, discount_percent, max_uses, expires_at, is_active, created_at")
+        .single();
+      if (insertError) {
+        if (insertError.code === "23505") throw new Error("Ese código ya está siendo utilizado. Prueba con otro.");
+        throw insertError;
+      }
+      setCoupons((current) => [data, ...current]);
+      setCode("");
+      setMaxUses("");
+      setExpiresAt("");
+      setNotice(`El código ${data.code} quedó disponible para el evento.`);
+    } catch (saveError) {
+      console.error("No se pudo crear el código de descuento.", saveError);
+      setError(saveError.message || "No se pudo crear el código.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  const toggleCoupon = async (coupon) => {
+    setBusyId(coupon.id);
+    setError("");
+    setNotice("");
+    try {
+      const { data, error: updateError } = await requireSupabase()
+        .from("event_discount_coupons")
+        .update({ is_active: !coupon.is_active })
+        .eq("id", coupon.id)
+        .select("id, is_active")
+        .single();
+      if (updateError) throw updateError;
+      setCoupons((current) => current.map((item) => item.id === coupon.id
+        ? { ...item, is_active: data.is_active }
+        : item));
+      setNotice(data.is_active ? `El código ${coupon.code} fue activado.` : `El código ${coupon.code} fue desactivado.`);
+    } catch (updateError) {
+      console.error("No se pudo actualizar el código de descuento.", updateError);
+      setError(updateError.message || "No se pudo actualizar el código.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
+  return (
+    <section className="producer-dashboard-content">
+      <div className="producer-dashboard-welcome">
+        <div><span className="producer-dashboard-kicker">PROMOCIONES</span><h2>Códigos de descuento</h2><p>Crea promociones para las entradas de tus eventos. Los códigos se verifican en el servidor al momento de la compra.</p></div>
+      </div>
+      {error && <p className="producer-portal-error" role="alert">{error}</p>}
+      {notice && <p className="producer-dashboard-notice" role="status"><Check size={16} />{notice}</p>}
+      <form className="producer-dashboard-list-card producer-coupon-form" onSubmit={createCoupon}>
+        <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">NUEVA PROMOCIÓN</span><h3>Configurar código</h3></div></div>
+        {availableEvents.length ? (
+          <>
+            <div className="producer-coupon-fields">
+              <label>Evento
+                <select value={eventId} onChange={(event) => setEventId(event.target.value)} required>
+                  {availableEvents.map((item) => <option value={item.id} key={item.id}>{item.title}</option>)}
+                </select>
+              </label>
+              <label>Código
+                <input value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} minLength={3} maxLength={32} pattern="[A-Z0-9_-]{3,32}" placeholder="VERANO20" required />
+              </label>
+              <label>Tipo de descuento
+                <select value={discountType} onChange={(event) => setDiscountType(event.target.value)}>
+                  <option value="percent">Porcentaje (1% a 99%)</option>
+                  <option value="free">Entrada gratis</option>
+                </select>
+              </label>
+              {discountType === "percent" && <label>Porcentaje
+                <input type="number" min="1" max="99" step="1" value={discountPercent} onChange={(event) => setDiscountPercent(event.target.value)} required />
+              </label>}
+              <label>Usos máximos <small>Déjalo vacío para no limitar</small>
+                <input type="number" min="1" step="1" value={maxUses} onChange={(event) => setMaxUses(event.target.value)} placeholder="Sin límite" />
+              </label>
+              <label>Válido hasta <small>Opcional</small>
+                <input type="datetime-local" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} />
+              </label>
+            </div>
+            <button className="producer-dashboard-primary" type="submit" disabled={busyId === "create"}>
+              <Plus size={16} /> {busyId === "create" ? "Guardando…" : "Crear código"}
+            </button>
+          </>
+        ) : (
+          <div className="producer-dashboard-empty"><Ticket size={22} /><strong>Necesitas un evento publicado</strong><span>Publica un evento para poder asociarle códigos de descuento.</span></div>
+        )}
+      </form>
+      <div className="producer-dashboard-list-card producer-coupon-list">
+        <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">TUS PROMOCIONES</span><h3>Códigos creados</h3></div></div>
+        {loading ? <p className="producer-coupon-empty">Cargando códigos…</p> : coupons.length ? (
+          <div className="producer-coupon-items">
+            {coupons.map((coupon) => (
+              <article className="producer-coupon-row" key={coupon.id}>
+                <div>
+                  <strong>{coupon.code}</strong>
+                  <span>{events.find((item) => item.id === coupon.event_id)?.title || "Evento"} · {coupon.discount_type === "free" ? "Entrada gratis" : `${coupon.discount_percent}% de descuento`}</span>
+                  <small>{coupon.max_uses ? `Máximo ${coupon.max_uses} usos` : "Sin límite de usos"}{coupon.expires_at ? ` · Vence ${new Intl.DateTimeFormat("es-CL", { dateStyle: "medium", timeStyle: "short" }).format(new Date(coupon.expires_at))}` : ""}</small>
+                </div>
+                <span className={`producer-coupon-status${coupon.is_active ? " is-active" : ""}`}>{coupon.is_active ? "Activo" : "Inactivo"}</span>
+                <button type="button" disabled={Boolean(busyId)} onClick={() => void toggleCoupon(coupon)}>
+                  {busyId === coupon.id ? "Guardando…" : coupon.is_active ? "Desactivar" : "Activar"}
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : <p className="producer-coupon-empty">Todavía no has creado códigos de descuento.</p>}
+      </div>
+    </section>
+  );
+}
+
 export default function ProducerDashboard({ onPublish, onNavigate }) {
   const [producer, setProducer] = useState(null);
   const [producerEvents, setProducerEvents] = useState([]);
@@ -784,12 +962,13 @@ export default function ProducerDashboard({ onPublish, onNavigate }) {
         <button className={activeTab === "events" ? "is-active" : ""} type="button" onClick={() => setActiveTab("events")}><Ticket size={17} /> Mis eventos <span>{producerEvents.length}</span></button>
         <button className={activeTab === "products" ? "is-active" : ""} type="button" onClick={() => setActiveTab("products")}><Package size={17} /> Productos</button>
         <button className={activeTab === "sales" ? "is-active" : ""} type="button" onClick={() => setActiveTab("sales")}><BarChart3 size={17} /> Ventas e inventario</button>
+        <button className={activeTab === "coupons" ? "is-active" : ""} type="button" onClick={() => setActiveTab("coupons")}><Ticket size={17} /> Descuentos</button>
         <button className="producer-dashboard-sidebar__create" type="button" onClick={() => setActiveTab("create")}><Plus size={16} /> Crear evento</button>
         <div className="producer-dashboard-sidebar__account"><span>{producerName.slice(0, 1).toUpperCase()}</span><div><strong>{producerName}</strong><small>Cuenta Supabase</small></div><button type="button" aria-label="Cerrar sesión" onClick={signOut}><LogOut size={16} /></button></div>
       </aside>
       <main className="producer-dashboard-main">
         <header className="producer-dashboard-topbar">
-          <div><span>PRODUCTORES</span><strong>{activeTab === "create" ? "Crear evento" : activeTab === "events" ? "Mis eventos" : activeTab === "products" ? "Productos adicionales" : activeTab === "sales" ? "Ventas e inventario" : "Dashboard"}</strong></div>
+          <div><span>PRODUCTORES</span><strong>{activeTab === "create" ? "Crear evento" : activeTab === "events" ? "Mis eventos" : activeTab === "products" ? "Productos adicionales" : activeTab === "sales" ? "Ventas e inventario" : activeTab === "coupons" ? "Códigos de descuento" : "Dashboard"}</strong></div>
           <a href="/" target="_blank" rel="noreferrer">Ver sitio público <ArrowRight size={15} /></a>
         </header>
         {notice && <div className="producer-dashboard-notice" role="status"><Check size={16} />{notice}<button type="button" aria-label="Cerrar aviso" onClick={() => setNotice("")}>×</button></div>}
@@ -801,6 +980,8 @@ export default function ProducerDashboard({ onPublish, onNavigate }) {
           <ProductManagementTab events={producerEvents} />
         ) : activeTab === "sales" ? (
           <SalesTab events={producerEvents} />
+        ) : activeTab === "coupons" ? (
+          <DiscountCouponsTab events={producerEvents} />
         ) : (
           <OverviewTab events={producerEvents} onCreate={() => setActiveTab("create")} />
         )}

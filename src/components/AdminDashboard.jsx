@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Check, LogOut, RefreshCw, ShieldCheck, Ticket, UserCheck, UserX } from "lucide-react";
+import { Archive, Check, LogOut, RefreshCw, ShieldCheck, Ticket, UserCheck, UserX } from "lucide-react";
 import { endProducerSession } from "../data/producerPortal.js";
 import { requireSupabase } from "../data/supabase.js";
 import Brand from "./Brand.jsx";
@@ -173,6 +173,26 @@ export default function AdminDashboard({ onNavigate }) {
     }
   };
 
+  const archiveEvent = async (event) => {
+    if (!window.confirm(`¿Retirar “${event.title}” de los eventos publicados? Se conservarán las órdenes y entradas existentes.`)) return;
+    setError("");
+    setNotice("");
+    setBusyId(`event-${event.id}`);
+    try {
+      const { error: archiveError } = await requireSupabase().rpc("admin_archive_event", {
+        p_event_id: event.id,
+      });
+      if (archiveError) throw archiveError;
+      await loadDashboard();
+      setNotice(`“${event.title}” fue retirado. El historial de ventas y entradas se conserva.`);
+    } catch (archiveError) {
+      console.error("No se pudo retirar el evento.", archiveError);
+      setError(archiveError.message || "No se pudo retirar el evento.");
+    } finally {
+      setBusyId("");
+    }
+  };
+
   const signOut = async () => {
     try {
       await endProducerSession();
@@ -192,6 +212,7 @@ export default function AdminDashboard({ onNavigate }) {
         <span className="producer-dashboard-sidebar__label">ADMINISTRACIÓN</span>
         <a className="admin-dashboard__nav-link" href="#solicitudes"><UserCheck size={17} /> Solicitudes <span>{pendingAccounts.length}</span></a>
         <a className="admin-dashboard__nav-link" href="#asignaciones"><ShieldCheck size={17} /> Colaboradores</a>
+        <a className="admin-dashboard__nav-link" href="#eventos"><Ticket size={17} /> Eventos <span>{events.length}</span></a>
         <div className="producer-dashboard-sidebar__account"><span>A</span><div><strong>{admin?.full_name || "Administrador"}</strong><small>Acceso verificado</small></div><button type="button" aria-label="Cerrar sesión" onClick={signOut}><LogOut size={16} /></button></div>
       </aside>
       <main className="producer-dashboard-main">
@@ -256,6 +277,25 @@ export default function AdminDashboard({ onNavigate }) {
                 <button type="button" disabled={Boolean(busyId)} onClick={() => removeAssignment(assignment)} aria-label={`Quitar asignación del evento`}><UserX size={15} /> Quitar</button>
               </div>
             )) : <p className="admin-dashboard__empty">Aún no hay colaboradores asignados.</p>}
+          </div>
+        </section>
+        <section className="admin-dashboard__content" id="eventos">
+          <div className="producer-dashboard-welcome">
+            <div><span className="producer-dashboard-kicker">CATÁLOGO PÚBLICO</span><h2>Eventos publicados</h2><p>Retira publicaciones que ya no deban aparecer en el sitio. Las órdenes y entradas existentes se mantienen.</p></div>
+          </div>
+          <div className="admin-dashboard__event-list">
+            {events.length ? events.map((event) => (
+              <article className="admin-dashboard__event" key={event.id}>
+                <span><strong>{event.title}</strong><small>{new Intl.DateTimeFormat("es-CL", { dateStyle: "medium" }).format(new Date(event.starts_at))}</small></span>
+                <button
+                  type="button"
+                  disabled={Boolean(busyId)}
+                  onClick={() => void archiveEvent(event)}
+                >
+                  <Archive size={15} /> {busyId === `event-${event.id}` ? "Retirando…" : "Retirar evento"}
+                </button>
+              </article>
+            )) : <div className="producer-dashboard-empty"><Ticket size={23} /><strong>No hay eventos publicados</strong><span>Cuando se publique un evento, aparecerá aquí.</span></div>}
           </div>
         </section>
         <footer className="producer-dashboard-footer"><span>Accesos y asignaciones protegidos por políticas RLS de Supabase.</span><a href="/">Volver al sitio <Ticket size={13} /></a></footer>

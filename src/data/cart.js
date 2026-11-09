@@ -51,9 +51,21 @@ export function getCartProductLines(cart, events) {
   });
 }
 
-export function getCartTotals(lines) {
+export function getCartTotals(lines, discountCoupon = null) {
   const ticketLines = lines.filter((item) => item.kind !== "product");
   const productLines = lines.filter((item) => item.kind === "product");
+  const discountLines = discountCoupon
+    ? ticketLines.filter((item) => item.eventId === discountCoupon.event_id)
+    : [];
+  const ticketDiscount = discountLines.reduce((total, item) => {
+    const discountPerTicket = discountCoupon.discount_type === "free"
+      ? item.ticketPrice
+      : Math.floor(item.ticketPrice * discountCoupon.discount_percent / 100);
+    return total + discountPerTicket * item.quantity;
+  }, 0);
+  const waivedAdministration = discountCoupon?.discount_type === "free"
+    ? discountLines.reduce((total, item) => total + item.administrationFee * item.quantity, 0)
+    : 0;
   const ticketSubtotal = ticketLines.reduce((total, item) => total + item.ticketPrice * item.quantity, 0);
   const productSubtotal = productLines.reduce((total, item) => total + item.ticketPrice * item.quantity, 0);
   const ticketAdministrationTotal = ticketLines.reduce(
@@ -71,7 +83,8 @@ export function getCartTotals(lines) {
     ticketAdministrationTotal,
     productAdministrationTotal,
     administrationTotal,
-    total: ticketSubtotal + productSubtotal + administrationTotal,
+    discountTotal: ticketDiscount + waivedAdministration,
+    total: ticketSubtotal + productSubtotal + administrationTotal - ticketDiscount - waivedAdministration,
     quantity: ticketLines.reduce((total, item) => total + item.quantity, 0),
     productQuantity: productLines.reduce((total, item) => total + item.quantity, 0),
   };

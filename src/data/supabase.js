@@ -23,7 +23,28 @@ export function requireSupabase() {
   return supabase;
 }
 
-export async function createPendingOrder({ checkoutKey, lines, products = [] }) {
+export async function validateDiscountCode(code) {
+  const { data, error } = await requireSupabase().rpc("validate_discount_code", {
+    p_code: code.trim().toUpperCase(),
+  });
+  if (error) {
+    console.error("No se pudo validar el código de descuento.", error);
+    throw new Error("No pudimos validar el código. Inténtalo otra vez.");
+  }
+  const messages = {
+    discount_code_invalid: "El código no existe o no es válido.",
+    discount_code_inactive: "Este código de descuento está desactivado.",
+    discount_code_expired: "Este código de descuento venció.",
+    discount_code_limit_reached: "Este código ya alcanzó su máximo de usos.",
+    discount_code_unavailable: "Este código no está disponible para este evento.",
+  };
+  if (!data?.valid) {
+    throw new Error(messages[data?.error] || "Este código de descuento no está disponible.");
+  }
+  return data;
+}
+
+export async function createPendingOrder({ checkoutKey, lines, products = [], discountCode = "" }) {
   const client = requireSupabase();
 
   const firstBuyer = lines[0]?.buyer ?? products[0]?.buyer;
@@ -46,6 +67,7 @@ export async function createPendingOrder({ checkoutKey, lines, products = [] }) 
         variant_id: product.variantId || null,
         quantity: product.quantity,
       })),
+      discount_code: discountCode || null,
     },
   });
 
@@ -66,6 +88,14 @@ export async function createPendingOrder({ checkoutKey, lines, products = [] }) 
       product_variant_required: "Selecciona una variante disponible para el producto.",
       product_variant_unavailable: "La variante seleccionada ya no está disponible.",
       invalid_product_item: "Revisa los productos y cantidades seleccionados.",
+      discount_code_invalid: "El código de descuento no existe o no es válido.",
+      discount_code_inactive: "Este código de descuento está desactivado.",
+      discount_code_expired: "Este código de descuento venció.",
+      discount_code_limit_reached: "Este código ya alcanzó su máximo de usos.",
+      discount_code_event_mismatch: "El código no aplica a las entradas de este evento.",
+      discount_code_unavailable: "Este código no está disponible para este evento.",
+      discount_code_already_applied: "Esta orden ya tiene otro código aplicado. Vuelve al carrito para actualizarla.",
+      order_not_payable: "La orden venció o ya no se puede pagar. Vuelve al carrito e inténtalo nuevamente.",
       order_creation_failed: "No se pudo guardar la orden en el servidor.",
     };
     const errorCode = responseError?.error;
@@ -101,7 +131,7 @@ export async function createMercadoPagoPreference({ orderId, checkoutKey }) {
   return data;
 }
 
-export async function registerFreeOrder({ checkoutKey, buyer, items }) {
+export async function registerFreeOrder({ checkoutKey, buyer, items, discountCode = "" }) {
   const { data, error } = await requireSupabase().functions.invoke("register-free-order", {
     body: {
       checkout_key: checkoutKey,
@@ -111,6 +141,7 @@ export async function registerFreeOrder({ checkoutKey, buyer, items }) {
         ticket_type_id: String(item.ticketTypeId),
         quantity: item.quantity,
       })),
+      discount_code: discountCode || null,
     },
   });
   if (error) {
@@ -125,6 +156,16 @@ export async function registerFreeOrder({ checkoutKey, buyer, items }) {
       ticket_type_unavailable: "Este tipo de entrada gratuita ya no está disponible.",
       invalid_buyer: "Revisa los datos del asistente; el RUT debe ser válido.",
       order_not_free: "Esta inscripción no corresponde a una entrada gratuita.",
+      invalid_items: "Revisa las entradas y cantidades seleccionadas.",
+      invalid_quantity: "La cantidad de entradas no es válida.",
+      discount_code_invalid: "El código de descuento no existe o no es válido.",
+      discount_code_inactive: "Este código de descuento está desactivado.",
+      discount_code_expired: "Este código de descuento venció.",
+      discount_code_limit_reached: "Este código ya alcanzó su máximo de usos.",
+      discount_code_event_mismatch: "El código no aplica a las entradas de este evento.",
+      discount_code_unavailable: "Este código no está disponible para este evento.",
+      discount_code_already_applied: "Esta orden ya tiene otro código aplicado. Vuelve al carrito para actualizarla.",
+      order_not_payable: "La orden venció o ya no se puede completar. Vuelve al carrito e inténtalo nuevamente.",
       ticket_delivery_not_configured: "No se pudieron preparar las entradas. Contacta al administrador.",
       ticket_encryption_not_configured: "No se pudieron preparar las entradas. Contacta al administrador.",
     };

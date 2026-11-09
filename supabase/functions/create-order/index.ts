@@ -49,6 +49,7 @@ Deno.serve(async (request: Request) => {
   const buyer = payload.buyer as Record<string, unknown> | undefined;
   const items = payload.items;
   const products = payload.products ?? [];
+  const discountCode = payload.discount_code ?? null;
   if (
     typeof checkoutKey !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(checkoutKey) ||
@@ -56,7 +57,8 @@ Deno.serve(async (request: Request) => {
     typeof buyer.rut !== "string" || typeof buyer.email !== "string" ||
     typeof buyer.phone !== "string" || !Array.isArray(items) ||
     items.length > 10 || !Array.isArray(products) ||
-    products.length > 20 || (items.length === 0 && products.length === 0)
+    products.length > 20 || (items.length === 0 && products.length === 0) ||
+    (discountCode !== null && (typeof discountCode !== "string" || discountCode.length > 32))
   ) {
     return jsonResponse(400, { error: "invalid_order" });
   }
@@ -113,7 +115,7 @@ Deno.serve(async (request: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  const { data, error } = await admin.rpc("create_pending_order_with_products", {
+  const { data, error } = await admin.rpc("create_pending_order_with_discount", {
     p_checkout_key: checkoutKey,
     p_buyer_name: buyer.name.trim(),
     p_buyer_rut: buyer.rut.trim(),
@@ -121,11 +123,12 @@ Deno.serve(async (request: Request) => {
     p_buyer_phone: buyer.phone.trim(),
     p_items: items,
     p_products: products,
+    p_discount_code: typeof discountCode === "string" ? discountCode.trim().toUpperCase() || null : null,
   });
   if (error) {
     console.error("create_pending_order failed", error.message);
-    const inventoryErrors = new Set(["insufficient_inventory", "ticket_type_unavailable", "insufficient_product_inventory", "product_unavailable", "product_variant_required", "product_variant_unavailable"]);
-    const code = error.message.match(/(?:insufficient_inventory|ticket_type_unavailable|insufficient_product_inventory|product_unavailable|product_variant_required|product_variant_unavailable|invalid_buyer|invalid_items|invalid_quantity)/)?.[0];
+    const inventoryErrors = new Set(["insufficient_inventory", "ticket_type_unavailable", "insufficient_product_inventory", "product_unavailable", "product_variant_required", "product_variant_unavailable", "discount_code_limit_reached"]);
+    const code = error.message.match(/(?:insufficient_inventory|ticket_type_unavailable|insufficient_product_inventory|product_unavailable|product_variant_required|product_variant_unavailable|invalid_buyer|invalid_items|invalid_quantity|discount_code_invalid|discount_code_inactive|discount_code_expired|discount_code_limit_reached|discount_code_event_mismatch|discount_code_unavailable|discount_code_already_applied|order_not_payable)/)?.[0];
     return jsonResponse(inventoryErrors.has(code ?? "") ? 409 : 400, {
       error: code ?? "order_creation_failed",
     });

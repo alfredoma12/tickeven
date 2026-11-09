@@ -86,6 +86,7 @@ function mapEvent(row, index, ticketInventory = [], productInventory = []) {
   return {
     id: row.id,
     producerId: row.producer_id,
+    status: row.status,
     isExample,
     slug: isExample ? `evento-de-ejemplo-${row.id}` : row.slug,
     title: isExample ? "Evento de ejemplo" : row.title,

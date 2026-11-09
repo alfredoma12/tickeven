@@ -5,5 +5,8 @@ Disallow: /carrito
 Disallow: /admin
 Disallow: /colaboradores
 Disallow: /productores/dashboard
+Disallow: /productores/login
+Disallow: /admin/login
+Disallow: /colaboradores/login
 
 Sitemap: https://tickeven.cl/sitemap.xml

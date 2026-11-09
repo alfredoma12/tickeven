@@ -153,7 +153,7 @@ function EventCard({ event, onBuy, onFavorite, favorite }) {
   );
 }
 
-function HomePage({ cartCount, events, loading, error, onNavigate }) {
+function HomePage({ cartCount, events, loading, error, onNavigate, showTerms = false, showPrivacy = false }) {
   const [category, setCategory] = useState("Todos");
   const [city, setCity] = useState("Todas las ciudades");
   const [search, setSearch] = useState("");
@@ -272,6 +272,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
       </header>
 
       <main>
+        {!showTerms && !showPrivacy && <>
         <section className="hero page-container" aria-label="Eventos destacados">
           <div className="hero__visual" key={currentSlide.image}>
             <img className="hero__image" src={currentSlide.image} alt={currentSlide.imageAlt} />
@@ -413,13 +414,16 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
           </div>
         </section>
 
-        <section className="legal-section page-container" aria-labelledby="legal-title">
+        </>}
+
+        {(showTerms || showPrivacy) && <section className="legal-section page-container" aria-labelledby="legal-title">
           <div className="legal-section__header">
             <span className="section-kicker">INFORMACIÓN LEGAL</span>
-            <h2 id="legal-title">Términos, condiciones y soporte<span className="accent-dot">.</span></h2>
+            <h2 id="legal-title">{showTerms ? "Términos y condiciones" : "Política de privacidad"}<span className="accent-dot">.</span></h2>
           </div>
 
           <div className="legal-section__grid">
+            {showTerms && (
             <article className="legal-card" id="terminos">
               <div className="legal-card__header">
                 <h3>Términos y condiciones</h3>
@@ -502,7 +506,9 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
                 </ul>
               </div>
             </article>
+            )}
 
+            {showPrivacy && (
             <article className="legal-card" id="privacidad">
               <div className="legal-card__header">
                 <h3>Política de privacidad</h3>
@@ -516,8 +522,9 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
                 <p>Las comunicaciones de compra, validación de acceso y atención de soporte pueden enviarse al correo registrado por el usuario. El usuario puede solicitar dejar de recibir comunicaciones promocionales, sin afectar las comunicaciones necesarias para la operación del servicio.</p>
               </div>
             </article>
+            )}
           </div>
-        </section>
+        </section>}
 
       </main>
 
@@ -533,7 +540,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
               <div><h3>AYUDA</h3><a href="#ayuda">Preguntas frecuentes</a><a href={`mailto:${SUPPORT_EMAIL}`}>Contacto soporte</a><a href="#comprar">¿Cómo comprar?</a></div>
               <div><h3>PARA PRODUCTORES</h3><a href="/productores" target="_blank" rel="noreferrer">Conoce la plataforma</a><a href="/productores#producer-faq" target="_blank" rel="noreferrer">Preguntas frecuentes</a></div>
               <div><h3>ACCESO A PORTALES</h3><a href={getBrowserPath("/productores/login")}>Iniciar sesión productores</a><a href={getBrowserPath("/admin/login")}>Portal administrador</a><a href={getBrowserPath("/colaboradores/login")}>Portal colaboradores</a></div>
-              <div><h3>TICKEVEN.CL</h3><a href="#nosotros">Sobre nosotros</a><a href="#terminos">Términos y condiciones</a><a href="#privacidad">Política de privacidad</a></div>
+              <div><h3>TICKEVEN.CL</h3><a href="#nosotros">Sobre nosotros</a><a href={getBrowserPath("/terminos")}>Términos y condiciones</a><a href={getBrowserPath("/privacidad")}>Política de privacidad</a></div>
             </div>
           </div>
           <div className="footer-bottom">
@@ -606,6 +613,12 @@ function App() {
     if (path === "/productores") {
       title = "Plataforma para productores de eventos | TickEven.cl";
       pageDescription = "Publica y gestiona tus eventos con TickEven: vende entradas, agrega productos, controla inventario y revisa tus ventas desde un solo dashboard.";
+    } else if (path === "/terminos") {
+      title = "Términos y condiciones | TickEven.cl";
+      pageDescription = "Consulta los términos y condiciones de uso y compra de entradas en TickEven.cl.";
+    } else if (path === "/privacidad") {
+      title = "Política de privacidad | TickEven.cl";
+      pageDescription = "Consulta cómo TickEven trata y protege los datos personales de sus usuarios.";
     } else if (path.startsWith("/evento/")) {
       if (routeEvent && !routeEvent.isExample) {
         title = `${routeEvent.title} | Entradas en TickEven.cl`;
@@ -811,7 +824,7 @@ function App() {
     />;
   }
 
-  return <HomePage cartCount={totals.quantity + totals.productQuantity} events={allEvents} loading={eventsLoading} error={eventsError} onNavigate={navigate} />;
+  return <HomePage cartCount={totals.quantity + totals.productQuantity} events={allEvents} loading={eventsLoading} error={eventsError} onNavigate={navigate} showTerms={path === "/terminos"} showPrivacy={path === "/privacidad"} />;
 }
 
 export default App;

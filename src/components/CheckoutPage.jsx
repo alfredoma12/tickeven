@@ -215,7 +215,7 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
               <div className="checkout-form__section-title"><span>1</span><div><h2>Pago seguro</h2><p>Completarás el pago en el sitio seguro de Mercado Pago.</p></div></div>
               <div className="checkout-payment-placeholder"><LockKeyhole size={15} /><span>TickEven no recibe ni almacena los datos de tu tarjeta. Las entradas se emiten después de confirmar el pago.</span></div>
             </section>
-            <label className="checkout-terms"><input type="checkbox" required /> <span>Acepto los términos y autorizo el uso de mis datos para gestionar esta orden y sus entradas.</span></label>
+            <label className="checkout-terms"><input type="checkbox" required /> <span>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos para gestionar esta orden y sus entradas.</span></label>
             {checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}
             <button className="checkout-submit" type="submit" disabled={isSubmitting}>
               {isSubmitting ? "Conectando con Mercado Pago…" : "Pagar con Mercado Pago"} <ArrowRight size={16} />

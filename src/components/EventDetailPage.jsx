@@ -474,8 +474,8 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
                     <label className="event-buyer-form__terms">
                       <input type="checkbox" required />
                       <span>{isFreeSelection
-                        ? "Acepto los términos y autorizo el uso de mis datos para gestionar esta inscripción y sus entradas."
-                        : "Acepto los términos y autorizo el uso de mis datos para preparar la compra y sus entradas."}</span>
+                        ? <>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos para gestionar esta inscripción y sus entradas.</>
+                        : <>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos para preparar la compra y sus entradas.</>}</span>
                     </label>
                     {registrationError && <p className="event-buyer-form__error" role="alert">{registrationError}</p>}
                     <button className="event-buyer-form__submit" type="submit" disabled={isRegistering}>

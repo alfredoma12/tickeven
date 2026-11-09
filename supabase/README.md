@@ -27,6 +27,7 @@ npx supabase functions deploy register-free-order
 npx supabase functions deploy validate-ticket
 npx supabase functions deploy create-payment-preference
 npx supabase functions deploy mercadopago-webhook
+npx supabase functions deploy send-ticket-email
 npx supabase functions deploy get-order-tickets
 ```
 
@@ -109,23 +110,26 @@ npx supabase functions deploy get-order-tickets
   Configura los secretos de las Edge Functions (usa tus credenciales de prueba primero):
 
   ```powershell
-  npx supabase secrets set MERCADOPAGO_ACCESS_TOKEN=TOKEN_DE_PRUEBA MERCADOPAGO_WEBHOOK_SECRET=... MERCADOPAGO_CHECKOUT_MODE=test TICKET_CREDENTIALS_ENCRYPTION_KEY=... APP_ORIGIN=https://tickeven.cl APP_PUBLIC_URL=https://tickeven.cl
+  npx supabase secrets set MERCADOPAGO_ACCESS_TOKEN=TOKEN_DE_PRUEBA MERCADOPAGO_WEBHOOK_SECRET=... MERCADOPAGO_CHECKOUT_MODE=test TICKET_CREDENTIALS_ENCRYPTION_KEY=... BREVO_API_KEY=... BREVO_SENDER_EMAIL=correo-verificado@tickeven.cl APP_ORIGIN=https://tickeven.cl APP_PUBLIC_URL=https://tickeven.cl
   ```
 
   `TOKEN_DE_PRUEBA` se copia desde las credenciales de prueba de la aplicación de Mercado Pago. No identifiques el entorno solo por el prefijo: la documentación de Checkout Pro muestra credenciales de prueba con prefijo `APP_USR`. `MERCADOPAGO_CHECKOUT_MODE=test` selecciona la URL sandbox; para cobros reales se requiere cambiar explícitamente a `production` junto con las credenciales de producción. `APP_PUBLIC_URL` y `APP_ORIGIN` deben ser `https://tickeven.cl`; el webhook de Mercado Pago sigue apuntando a la Edge Function de Supabase, no al sitio. Opcionalmente, configura `MERCADOPAGO_COLLECTOR_ID` con el ID de vendedor que debe recibir los pagos.
 
+  `BREVO_API_KEY` es la clave API transaccional de Brevo. `BREVO_SENDER_EMAIL` debe ser un remitente verificado en Brevo; `BREVO_SENDER_NAME` es opcional y por defecto usa `TickEven`. Nunca guardes estas credenciales en variables `VITE_*`.
+
   Para el procedimiento y casos de prueba, consulta [MERCADOPAGO_TESTING.md](MERCADOPAGO_TESTING.md).
-- Una vez aplicada la migración de pagos, despliega las funciones:
+- Aplica la migración nueva con `npx supabase db push --dry-run` y `npx supabase db push`; luego despliega las funciones:
 
   ```powershell
   npx supabase functions deploy create-payment-preference
   npx supabase functions deploy mercadopago-webhook
+  npx supabase functions deploy send-ticket-email
   npx supabase functions deploy get-order-tickets
   npx supabase functions deploy register-free-order
   ```
 
   Prueba primero con credenciales TEST y usuarios/tarjetas de prueba proporcionados por Mercado Pago. Cambia a credenciales de producción solo después de comprobar el pago aprobado, el rechazo, el retorno a TickEven, la recepción del webhook y la descarga de los PDF. Nunca uses tarjetas reales para pruebas.
-- Las credenciales de entradas se cifran en Supabase y solo se entregan al navegador que conserva la clave aleatoria de esa compra cuando el pago ya aparece como `paid`. Actualmente el PDF se descarga al volver al checkout; el envío por correo requiere configurar un proveedor de correo por separado.
+- Las credenciales de entradas se cifran en Supabase y el envío de correo reutiliza los QR ya almacenados. Cada orden tiene un registro idempotente en `ticket_email_deliveries`; si Brevo falla, el webhook informa error para que Mercado Pago reintente. Los reintentos no crean entradas ni QR nuevos y la función de envío es privada.
 - El carrito vive solo en memoria durante la navegación; no persiste en el navegador. Al crear la orden, el backend guarda comprador y líneas y recalcula precios e inventario.
-- La migración `20261105040000_mercadopago_checkout.sql` agrega campos de preferencia, almacén cifrado de credenciales y una función transaccional para completar pagos aprobados; ya está aplicada en producción. Las Edge Functions de Mercado Pago todavía deben configurarse con secretos y desplegarse.
+- La migración `20261105040000_mercadopago_checkout.sql` agrega campos de preferencia, almacén cifrado de credenciales y una función transaccional para completar pagos aprobados; `20261110010000_ticket_email_delivery.sql` agrega el registro idempotente del correo.
 - `src/data/ticketPdf.js` genera el PDF solo después de recuperar credenciales de tickets emitidos por un webhook de pago aprobado.

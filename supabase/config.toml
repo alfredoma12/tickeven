@@ -15,3 +15,6 @@ verify_jwt = false
 
 [functions.get-order-tickets]
 verify_jwt = false
+
+[functions.send-ticket-email]
+verify_jwt = true

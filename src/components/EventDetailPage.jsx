@@ -65,6 +65,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
   const [buyerFormOpen, setBuyerFormOpen] = useState(false);
   const [rut, setRut] = useState("");
   const [rutError, setRutError] = useState("");
+  const [emailError, setEmailError] = useState("");
   const [registrationError, setRegistrationError] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const buyerFormRef = useRef(null);
@@ -138,13 +139,21 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
   const submitBuyerDetails = async (formEvent) => {
     formEvent.preventDefault();
     const formData = new FormData(formEvent.currentTarget);
+    const email = String(formData.get("email")).trim();
+    const confirmEmail = String(formData.get("confirmEmail")).trim();
+    if (email.toLocaleLowerCase("es") !== confirmEmail.toLocaleLowerCase("es")) {
+      setEmailError("Los correos electrónicos no coinciden.");
+      return;
+    }
+
     const buyer = {
       name: String(formData.get("name")).trim(),
       rut: rut.trim(),
-      email: String(formData.get("email")).trim(),
+      email,
       phone: String(formData.get("phone")).trim(),
     };
 
+    setEmailError("");
     if (!isValidRut(buyer.rut)) {
       setRutError("Ingresa un RUT chileno válido.");
       return;
@@ -433,7 +442,31 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
                       {rutError && <span className="event-buyer-form__error" id="event-rut-error">{rutError}</span>}
                     </label>
                     <label>Correo electrónico
-                      <input name="email" type="email" autoComplete="email" placeholder="tu@correo.cl" required />
+                      <input
+                        id="event-buyer-email"
+                        name="email"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="tu@correo.cl"
+                        aria-invalid={Boolean(emailError)}
+                        aria-describedby={emailError ? "event-email-error" : undefined}
+                        onChange={() => setEmailError("")}
+                        required
+                      />
+                    </label>
+                    <label>Confirma tu correo electrónico
+                      <input
+                        id="event-buyer-confirm-email"
+                        name="confirmEmail"
+                        type="email"
+                        autoComplete="email"
+                        placeholder="Repite tu correo"
+                        aria-invalid={Boolean(emailError)}
+                        aria-describedby={emailError ? "event-email-error" : undefined}
+                        onChange={() => setEmailError("")}
+                        required
+                      />
+                      {emailError && <span className="event-buyer-form__error" id="event-email-error">{emailError}</span>}
                     </label>
                     <label>Teléfono
                       <input name="phone" type="tel" autoComplete="tel" placeholder="+56 9 1234 5678" required />

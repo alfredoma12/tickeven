@@ -59,6 +59,36 @@ async function verifySignature(request: Request, paymentId: string, secret: stri
     [...expected].reduce((valid, character, index) => valid | (character.charCodeAt(0) ^ parts.v1.charCodeAt(index)), 0) === 0;
 }
 
+async function triggerTicketEmail(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  orderId: string,
+  paymentId: string,
+) {
+  let response: Response;
+  try {
+    response = await fetch(`${supabaseUrl}/functions/v1/send-ticket-email`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ order_id: orderId, payment_id: paymentId }),
+      signal: AbortSignal.timeout(35000),
+    });
+  } catch (error) {
+    console.error("Could not invoke ticket email delivery.", orderId, error);
+    return false;
+  }
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !["sent", "processing", "no_tickets"].includes(result?.delivery)) {
+    console.error("Ticket email delivery did not complete.", orderId, response.status, result?.error);
+    return false;
+  }
+  return true;
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") return jsonResponse(405, { error: "method_not_allowed" });
 
@@ -145,6 +175,9 @@ Deno.serve(async (request: Request) => {
         console.error("Could not save Mercado Pago fee details.", financialError.message);
         return jsonResponse(500, { error: "payment_financials_save_failed" });
       }
+      if (!await triggerTicketEmail(supabaseUrl, serviceRoleKey, orderId, paymentId)) {
+        return jsonResponse(502, { error: "ticket_email_delivery_failed" });
+      }
       return jsonResponse(200, { received: true, processed: true });
     }
     const refundResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}/refunds`, {
@@ -228,6 +261,9 @@ Deno.serve(async (request: Request) => {
     const refunded = await refundUnfulfillablePayment(admin, paymentId, order, payment);
     if (!refunded) return jsonResponse(502, { error: "order_completion_refund_failed" });
     return jsonResponse(200, { received: true, processed: true, order_refunded: true });
+  }
+  if (!await triggerTicketEmail(supabaseUrl, serviceRoleKey, orderId, paymentId)) {
+    return jsonResponse(502, { error: "ticket_email_delivery_failed" });
   }
   return jsonResponse(200, { received: true, processed: true });
 });

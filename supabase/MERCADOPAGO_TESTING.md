@@ -50,6 +50,9 @@ Estos nombres de secretos, la base de datos de órdenes y la emisión de entrada
    - `APP_ORIGIN`: `https://tickeven.cl`, el origen exacto del frontend.
    - `APP_PUBLIC_URL`: `https://tickeven.cl`, base de las URLs de retorno.
    - `TICKET_CREDENTIALS_ENCRYPTION_KEY`: clave de 32 bytes codificada en Base64, requerida por esta aplicación para cifrar credenciales de entradas. No es una credencial de Mercado Pago.
+   - `BREVO_API_KEY`: clave API transaccional de Brevo.
+   - `BREVO_SENDER_EMAIL`: dirección verificada como remitente en Brevo.
+   - `BREVO_SENDER_NAME`: opcional; por defecto se usa `TickEven`.
 2. En la aplicación de Mercado Pago, configura Webhooks para el evento **Pagos** (`payment`) y una URL HTTPS que apunte a la Edge Function. La documentación recomienda configurar por separado URL de prueba y URL de producción.
 3. Despliega las funciones de Supabase que componen este flujo:
 
@@ -57,6 +60,7 @@ Estos nombres de secretos, la base de datos de órdenes y la emisión de entrada
    npx supabase functions deploy create-order
    npx supabase functions deploy create-payment-preference
    npx supabase functions deploy mercadopago-webhook
+   npx supabase functions deploy send-ticket-email
    npx supabase functions deploy get-order-tickets
    ```
 
@@ -73,7 +77,8 @@ Estos nombres de secretos, la base de datos de órdenes y la emisión de entrada
 | 5. Notificar el pago | Mercado Pago hacia backend | Mercado Pago envía el evento `payment` a la URL de Webhooks configurada. El backend valida `x-signature` y el identificador de pago; no confía en datos enviados por el navegador. | Webhooks de Mercado Pago; firma HMAC descrita en la [documentación oficial](https://www.mercadopago.cl/developers/en/docs/checkout-pro-preferences/additional-content/notifications/webhooks). |
 | 6. Consultar el pago | Backend de la aplicación | Después de validar la firma, consulta el recurso oficial y verifica el estado real del pago. La documentación de notificaciones indica consultar el pago por ID. | `GET https://api.mercadopago.com/v1/payments/{id}`. |
 | 7. Completar la orden | Backend de la aplicación | En este repositorio solo un pago `approved`, con moneda e importe coincidentes, completa la orden y emite entradas. Un retorno del navegador no emite entradas. | Supabase RPC `complete_mercadopago_order`; lógica local, no endpoint de Mercado Pago. |
-| 8. Volver y comprobar | Frontend y backend | Mercado Pago retorna a una `back_url`; el frontend vuelve a consultar Supabase por el estado y muestra/descarga entradas solo si el backend confirma que la orden está pagada. | `back_urls` en la preferencia y Edge Function `get-order-tickets`. |
+| 8. Enviar tickets | Backend de la aplicación | El webhook llama a la función privada; esta verifica de nuevo el pago, recupera los QR existentes, genera un PDF por entrada y envía adjuntos Base64 a Brevo. | Edge Function `send-ticket-email` y `POST https://api.brevo.com/v3/smtp/email`. |
+| 9. Volver y comprobar | Frontend y backend | Mercado Pago retorna a una `back_url`; el frontend vuelve a consultar Supabase por el estado y muestra/descarga entradas solo si el backend confirma que la orden está pagada. | `back_urls` en la preferencia y Edge Function `get-order-tickets`. |
 
 ### Casos de tarjeta documentados
 
@@ -82,6 +87,8 @@ La tabla oficial de [compras de prueba](https://www.mercadopago.cl/developers/en
 ### Verificación de resultados
 
 - **Aprobado:** Webhooks muestra la notificación; el backend valida la firma y consulta `GET /v1/payments/{id}`; la orden local pasa a pagada y se emiten entradas. El PDF debe poder descargarse al regresar al checkout.
+- **Correo:** verifica que llegue un PDF independiente por entrada; en `public.ticket_email_deliveries` la orden debe quedar como `sent`, con `sent_at` y `brevo_message_id`. Revisa los logs de `send-ticket-email` si Brevo no acepta el mensaje.
+- **Idempotencia:** reenvía la misma notificación desde el panel de Webhooks. Debe mantenerse un registro por `order_id` y no enviarse otro correo si ya figura `sent`. Si Brevo falla, se guarda el error y el webhook devuelve fallo para permitir el reintento.
 - **Rechazado o pendiente:** no se deben emitir entradas. La pantalla de retorno no es la fuente de verdad; vuelve a consultar el estado del servidor.
 - **Notificación con error:** revisa el detalle de entrega en el panel de Webhooks, el log de la Edge Function y el estado de la orden. Mercado Pago espera una respuesta HTTP `200` o `201` para confirmar la recepción y puede reintentar notificaciones no confirmadas, según su [guía de Webhooks](https://www.mercadopago.cl/developers/en/docs/checkout-pro-preferences/additional-content/notifications/webhooks).
 

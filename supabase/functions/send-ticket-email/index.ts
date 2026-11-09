@@ -1,5 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import jsPDF from "npm:jspdf@4.2.1";
+import { jsPDF } from "npm:jspdf@4.2.1";
 import QRCode from "npm:qrcode@1.5.4";
 import { buildTicketEmail, formatEventDate } from "./email-template.js";
 
@@ -31,6 +31,16 @@ type OrderItem = {
 
 const maxImageBytes = 250_000;
 const maxAttachmentBytes = 18 * 1024 * 1024;
+
+function parseBrevoSender(value: string, configuredName: string | undefined) {
+  const combined = value.match(/^\s*(.*?)\s*<([^<>]+)>\s*$/);
+  const email = (combined?.[2] ?? value).trim();
+  if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) return null;
+  return {
+    email,
+    name: configuredName?.trim() || combined?.[1]?.trim() || "TickEven",
+  };
+}
 
 function jsonResponse(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -345,12 +355,17 @@ Deno.serve(async (request: Request) => {
   const accessToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
   const encryptionSecret = Deno.env.get("TICKET_CREDENTIALS_ENCRYPTION_KEY");
   const brevoApiKey = Deno.env.get("BREVO_API_KEY");
-  const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL");
+  const senderSetting = Deno.env.get("BREVO_SENDER_EMAIL")?.trim();
   const appPublicUrl = Deno.env.get("APP_PUBLIC_URL")?.replace(/\/+$/, "");
   if (!supabaseUrl || !serviceRoleKey || !encryptionSecret ||
-      !brevoApiKey || !senderEmail || !appPublicUrl) {
+      !brevoApiKey || !senderSetting || !appPublicUrl) {
     console.error("Ticket email delivery configuration is incomplete.");
     return jsonResponse(500, { error: "ticket_email_not_configured" });
+  }
+  const sender = parseBrevoSender(senderSetting, Deno.env.get("BREVO_SENDER_NAME"));
+  if (!sender) {
+    console.error("BREVO_SENDER_EMAIL must be a valid email address or a name followed by <email>.");
+    return jsonResponse(500, { error: "ticket_email_sender_invalid" });
   }
   if (request.headers.get("authorization") !== `Bearer ${serviceRoleKey}`) {
     return jsonResponse(401, { error: "unauthorized" });
@@ -578,7 +593,6 @@ Deno.serve(async (request: Request) => {
       orderTotalClp: order.total_clp,
       appPublicUrl,
     });
-    const senderName = Deno.env.get("BREVO_SENDER_NAME")?.trim() || "TickEven";
     let brevoResponse: Response;
     try {
       brevoResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -589,7 +603,7 @@ Deno.serve(async (request: Request) => {
           Accept: "application/json",
         },
         body: JSON.stringify({
-          sender: { name: senderName, email: senderEmail },
+          sender,
           replyTo: { email: "hola@tickeven.cl", name: "Soporte TickEven" },
           to: [{ email: order.buyer_email, name: order.buyer_name }],
           subject,

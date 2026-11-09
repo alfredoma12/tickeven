@@ -115,7 +115,7 @@ npx supabase functions deploy get-order-tickets
 
   `TOKEN_DE_PRUEBA` se copia desde las credenciales de prueba de la aplicación de Mercado Pago. No identifiques el entorno solo por el prefijo: la documentación de Checkout Pro muestra credenciales de prueba con prefijo `APP_USR`. `MERCADOPAGO_CHECKOUT_MODE=test` selecciona la URL sandbox; para cobros reales se requiere cambiar explícitamente a `production` junto con las credenciales de producción. `APP_PUBLIC_URL` y `APP_ORIGIN` deben ser `https://tickeven.cl`; el webhook de Mercado Pago sigue apuntando a la Edge Function de Supabase, no al sitio. Opcionalmente, configura `MERCADOPAGO_COLLECTOR_ID` con el ID de vendedor que debe recibir los pagos.
 
-  `BREVO_API_KEY` es la clave API transaccional de Brevo. `BREVO_SENDER_EMAIL` debe ser un remitente verificado en Brevo; `BREVO_SENDER_NAME` es opcional y por defecto usa `TickEven`. Nunca guardes estas credenciales en variables `VITE_*`.
+  `BREVO_API_KEY` es la clave API transaccional de Brevo. `BREVO_SENDER_EMAIL` debe ser la dirección verificada en Brevo (por ejemplo, `correo-verificado@tickeven.cl`), y `BREVO_SENDER_NAME` define el nombre visible, opcional y predeterminado a `TickEven`. Si se configura `BREVO_SENDER_EMAIL` con el formato `TickEven<correo@dominio.cl>`, la función separa el nombre de la dirección antes de llamar a Brevo. Nunca guardes estas credenciales en variables `VITE_*`.
 
   Para el procedimiento y casos de prueba, consulta [MERCADOPAGO_TESTING.md](MERCADOPAGO_TESTING.md).
 - Aplica la migración nueva con `npx supabase db push --dry-run` y `npx supabase db push`; luego despliega las funciones:

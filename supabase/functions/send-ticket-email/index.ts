@@ -347,7 +347,7 @@ Deno.serve(async (request: Request) => {
   const brevoApiKey = Deno.env.get("BREVO_API_KEY");
   const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL");
   const appPublicUrl = Deno.env.get("APP_PUBLIC_URL")?.replace(/\/+$/, "");
-  if (!supabaseUrl || !serviceRoleKey || !accessToken || !encryptionSecret ||
+  if (!supabaseUrl || !serviceRoleKey || !encryptionSecret ||
       !brevoApiKey || !senderEmail || !appPublicUrl) {
     console.error("Ticket email delivery configuration is incomplete.");
     return jsonResponse(500, { error: "ticket_email_not_configured" });
@@ -364,9 +364,10 @@ Deno.serve(async (request: Request) => {
   }
   const orderId = typeof payload.order_id === "string" ? payload.order_id : "";
   const paymentId = typeof payload.payment_id === "string" ? payload.payment_id : "";
+  const deliveryType = payload.delivery_type === "free" ? "free" : "mercadopago";
   if (
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId) ||
-    !/^\d{1,30}$/.test(paymentId)
+    (deliveryType === "free" ? paymentId !== "" : !/^\d{1,30}$/.test(paymentId))
   ) {
     return jsonResponse(400, { error: "invalid_payment_reference" });
   }
@@ -374,22 +375,6 @@ Deno.serve(async (request: Request) => {
   const admin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-  let paymentResponse: Response;
-  try {
-    paymentResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-      signal: AbortSignal.timeout(10000),
-    });
-  } catch (error) {
-    console.error("Could not reach Mercado Pago while preparing ticket email.", paymentId, error);
-    return jsonResponse(502, { error: "payment_provider_unavailable" });
-  }
-  if (!paymentResponse.ok) {
-    console.error("Could not verify Mercado Pago payment for ticket email.", paymentId, paymentResponse.status);
-    return jsonResponse(502, { error: "payment_lookup_failed" });
-  }
-  const payment = await paymentResponse.json();
-
   const { data: order, error: orderError } = await admin
     .from("orders")
     .select("id, status, payment_reference, buyer_name, buyer_email, total_clp")
@@ -399,22 +384,48 @@ Deno.serve(async (request: Request) => {
     console.error("Could not load paid order for ticket email.", orderError?.message ?? "order not found");
     return jsonResponse(orderError ? 500 : 404, { error: "order_lookup_failed" });
   }
-  if (
-    payment.status !== "approved" ||
-    payment.external_reference !== orderId ||
-    payment.currency_id !== "CLP" ||
-    Number(payment.transaction_amount) !== Number(order.total_clp) ||
-    order.status !== "paid" ||
-    order.payment_reference !== `mp:${paymentId}`
-  ) {
-    console.error("Verified Mercado Pago payment does not match ticket email order.", paymentId, orderId);
-    return jsonResponse(409, { error: "payment_order_mismatch" });
-  }
-  const expectedCollectorId = Deno.env.get("MERCADOPAGO_COLLECTOR_ID");
-  if (payment.collector_id && expectedCollectorId &&
-      String(payment.collector_id) !== expectedCollectorId) {
-    console.error("Mercado Pago collector does not match ticket email order.", paymentId, orderId);
-    return jsonResponse(409, { error: "payment_order_mismatch" });
+  if (deliveryType === "free") {
+    if (order.status !== "paid" || order.payment_reference !== `free:${orderId}`) {
+      console.error("Free ticket order is not confirmed.", orderId);
+      return jsonResponse(409, { error: "order_not_confirmed" });
+    }
+  } else {
+    if (!accessToken) {
+      console.error("Mercado Pago access token is not configured for ticket email.");
+      return jsonResponse(500, { error: "payment_provider_not_configured" });
+    }
+    let paymentResponse: Response;
+    try {
+      paymentResponse = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch (error) {
+      console.error("Could not reach Mercado Pago while preparing ticket email.", paymentId, error);
+      return jsonResponse(502, { error: "payment_provider_unavailable" });
+    }
+    if (!paymentResponse.ok) {
+      console.error("Could not verify Mercado Pago payment for ticket email.", paymentId, paymentResponse.status);
+      return jsonResponse(502, { error: "payment_lookup_failed" });
+    }
+    const payment = await paymentResponse.json();
+    if (
+      payment.status !== "approved" ||
+      payment.external_reference !== orderId ||
+      payment.currency_id !== "CLP" ||
+      Number(payment.transaction_amount) !== Number(order.total_clp) ||
+      order.status !== "paid" ||
+      order.payment_reference !== `mp:${paymentId}`
+    ) {
+      console.error("Verified Mercado Pago payment does not match ticket email order.", paymentId, orderId);
+      return jsonResponse(409, { error: "payment_order_mismatch" });
+    }
+    const expectedCollectorId = Deno.env.get("MERCADOPAGO_COLLECTOR_ID");
+    if (payment.collector_id && expectedCollectorId &&
+        String(payment.collector_id) !== expectedCollectorId) {
+      console.error("Mercado Pago collector does not match ticket email order.", paymentId, orderId);
+      return jsonResponse(409, { error: "payment_order_mismatch" });
+    }
   }
 
   const { data: hasTicketItems, error: ticketItemCheckError } = await admin

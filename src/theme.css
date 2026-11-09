@@ -2478,3 +2478,355 @@ textarea:focus-visible {
     flex-direction: column;
   }
 }
+
+.producer-sales-content {
+  width: min(1200px, calc(100% - 64px));
+}
+
+.producer-sales-content > .producer-dashboard-welcome {
+  align-items: center;
+  margin-bottom: 22px;
+}
+
+.producer-sales-content .producer-dashboard-primary {
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding-inline: 16px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.producer-sales-content .producer-event-filter {
+  max-width: none;
+  grid-template-columns: auto minmax(220px, 430px);
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  padding: 14px 18px;
+  border: 1px solid #292932;
+  border-radius: 12px;
+  color: #e2e2eb;
+  background: #0d0d12;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.producer-sales-content .producer-event-filter select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.producer-sales-export-note,
+.producer-sales-export-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: #a1a1aa;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.producer-sales-export-note svg {
+  flex: 0 0 auto;
+  color: #b6a0ff;
+}
+
+.producer-sales-export-notice {
+  color: #bde8cf;
+}
+
+.producer-sales-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.producer-sales-stats article {
+  min-width: 0;
+  min-height: 125px;
+  padding: 18px;
+  border-radius: 14px;
+  background:
+    radial-gradient(ellipse at 100% 0, rgb(114 0 255 / 10%), transparent 58%),
+    #0d0d12;
+}
+
+.producer-sales-stats article > span {
+  font-size: 9px;
+  letter-spacing: .9px;
+}
+
+.producer-sales-stats article > strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(20px, 2.2vw, 29px);
+}
+
+.producer-sales-stats article > small {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.producer-sales-content .producer-dashboard-list-card {
+  margin-top: 16px;
+  padding: 20px;
+  border-radius: 14px;
+}
+
+.producer-sales-content .producer-dashboard-list-card__heading {
+  min-width: 0;
+  align-items: center;
+  padding-bottom: 16px;
+  border-color: #292932;
+}
+
+.producer-sales-content .producer-dashboard-list-card__heading h3 {
+  font-size: 17px;
+  letter-spacing: -.02em;
+}
+
+.producer-sales-chart__headline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 0 10px;
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+.producer-sales-chart__headline strong {
+  color: #fff;
+  font-size: 22px;
+}
+
+.producer-sales-filters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.producer-sales-filters select {
+  min-height: 38px;
+  max-width: 210px;
+  padding: 0 30px 0 11px;
+  border: 1px solid #34343f;
+  border-radius: 8px;
+  color: #ededf3;
+  background: #101015;
+  font-size: 11px;
+}
+
+.producer-sales-chart__bars {
+  display: flex;
+  min-height: 175px;
+  align-items: stretch;
+  gap: 5px;
+  overflow-x: auto;
+  padding: 10px 2px 0;
+  border-bottom: 1px solid #34343f;
+}
+
+.producer-sales-chart__bar {
+  display: flex;
+  min-width: 12px;
+  flex: 1 0 12px;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.producer-sales-chart__bar > span {
+  display: flex;
+  width: min(100%, 28px);
+  height: 145px;
+  align-items: flex-end;
+  overflow: hidden;
+  border-radius: 5px 5px 0 0;
+  background: #17151e;
+}
+
+.producer-sales-chart__bar i {
+  display: block;
+  width: 100%;
+  min-height: 3px;
+  border-radius: 5px 5px 0 0;
+  background: linear-gradient(180deg, #e000c8, #7200ff 54%, #155bff);
+}
+
+.producer-sales-chart__bar small {
+  color: #a1a1aa;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.producer-finance-breakdown {
+  gap: 0 28px;
+  padding: 12px 0 0;
+}
+
+.producer-finance-breakdown > span {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.producer-finance-breakdown strong {
+  overflow-wrap: anywhere;
+}
+
+.producer-sales-table {
+  display: grid;
+  gap: 0;
+  padding: 0;
+}
+
+.producer-sales-table__head,
+.producer-sales-table__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px minmax(130px, .34fr);
+  align-items: center;
+  gap: 20px;
+}
+
+.producer-sales-table__head {
+  padding: 13px 0 10px;
+  color: #8e8e9b;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.producer-sales-table__head > span:not(:first-child) {
+  text-align: right;
+}
+
+.producer-sales-table__row {
+  min-width: 0;
+  padding: 14px 0;
+  border-bottom-color: #292932;
+  font-size: 12px;
+}
+
+.producer-sales-table__row > span {
+  min-width: 0;
+}
+
+.producer-sales-table__row > span strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.producer-sales-table__row small {
+  line-height: 1.45;
+}
+
+.producer-sales-table__row > strong:not(:first-child) {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.producer-sales-table__row > strong:last-child {
+  color: #e4d7ff;
+}
+
+.producer-sales-table__row i {
+  height: 6px;
+}
+
+@media (max-width: 900px) {
+  .producer-sales-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .producer-sales-content {
+    width: calc(100% - 28px);
+    padding-top: 24px;
+  }
+
+  .producer-sales-content > .producer-dashboard-welcome {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .producer-sales-content .producer-dashboard-primary {
+    width: 100%;
+  }
+
+  .producer-sales-content .producer-event-filter {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .producer-sales-content .producer-dashboard-list-card {
+    padding: 15px;
+  }
+
+  .producer-sales-content .producer-dashboard-list-card__heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .producer-sales-filters {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .producer-sales-filters select {
+    max-width: none;
+    flex: 1 1 145px;
+  }
+
+  .producer-sales-chart__bars {
+    min-height: 155px;
+    gap: 4px;
+  }
+
+  .producer-sales-chart__bar > span {
+    height: 125px;
+  }
+
+  .producer-sales-table__head {
+    display: none;
+  }
+
+  .producer-sales-table__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    padding: 14px 0;
+  }
+
+  .producer-sales-table__row > span {
+    grid-column: 1 / -1;
+  }
+
+  .producer-sales-table__row > strong:nth-child(2)::before {
+    content: "Ocupación ";
+    color: #a1a1aa;
+    font-weight: 500;
+  }
+
+  .producer-sales-table__row > strong:last-child::before {
+    content: "Recaudación ";
+    color: #a1a1aa;
+    font-weight: 500;
+  }
+
+  .producer-finance-breakdown {
+    gap: 0;
+    padding-top: 8px;
+  }
+}
+
+@media (max-width: 420px) {
+  .producer-sales-stats {
+    grid-template-columns: 1fr;
+  }
+}

@@ -54,6 +54,35 @@ function createSecurityCode() {
   return Array.from(random, (byte) => alphabet[byte % alphabet.length]).join("");
 }
 
+async function sendFreeOrderTicketEmail(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  orderId: string,
+) {
+  let response: Response;
+  try {
+    response = await fetch(`${supabaseUrl}/functions/v1/send-ticket-email`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ order_id: orderId, delivery_type: "free" }),
+      signal: AbortSignal.timeout(35000),
+    });
+  } catch (error) {
+    console.error("Could not invoke free ticket email delivery.", orderId, error);
+    return "failed";
+  }
+  const result = await response.json().catch(() => null);
+  if (!response.ok || !["sent", "processing"].includes(result?.delivery)) {
+    console.error("Free ticket email delivery did not complete.", orderId, response.status, result?.error);
+    return "failed";
+  }
+  return result.delivery as "sent" | "processing";
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return jsonResponse(405, { error: "method_not_allowed" });
@@ -192,9 +221,11 @@ Deno.serve(async (request: Request) => {
     }
   }
 
+  const emailDelivery = await sendFreeOrderTicketEmail(supabaseUrl, serviceRoleKey, order.order_id);
   return jsonResponse(200, {
     id: order.order_id,
     status: "paid",
     total_clp: 0,
+    email_delivery: emailDelivery,
   });
 });

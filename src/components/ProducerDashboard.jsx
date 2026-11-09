@@ -5,6 +5,7 @@ import {
   BarChart3,
   Check,
   CirclePlus,
+  Download,
   ImagePlus,
   LayoutDashboard,
   LogOut,
@@ -21,6 +22,7 @@ import { endProducerSession } from "../data/producerPortal.js";
 import { requireSupabase } from "../data/supabase.js";
 import { ADMINISTRATION_PERCENTAGE, getAdministrationFee } from "../data/pricing.js";
 import { createUUID } from "../data/site.js";
+import { buildTicketSalesCsv, createTicketSalesFilename } from "../data/ticketSalesCsv.js";
 import Brand from "./Brand.jsx";
 
 const categories = ["Conciertos", "Fiestas", "Teatro", "Deportes", "Familia", "Conferencias"];
@@ -535,6 +537,9 @@ function SalesTab({ events }) {
   const [reports, setReports] = useState([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
   const report = reports[0];
   const sales = report?.sales;
   const ticketData = report?.tickets;
@@ -580,33 +585,57 @@ function SalesTab({ events }) {
   const selectedPeriodTotal = period === "today" ? sales?.today_clp
     : period === "7d" ? sales?.last_7_days_clp
       : period === "month" ? sales?.month_clp : sales?.total_clp;
-  const exportCsv = () => {
-    const records = [
-      ["Tipo", "Nombre", "Capacidad", "Vendidas", "Reservadas", "Disponibles", "Recaudacion CLP"],
-      ...visibleTicketTypes.map((item) => ["Entrada", item.name, item.capacity, item.sold, item.reserved, item.available, item.revenue_clp]),
-      ...visibleProducts.map((item) => ["Producto", `${item.name}${item.variant ? ` - ${item.variant}` : ""}`, item.capacity, item.sold, item.reserved, item.available, item.revenue_clp]),
-    ];
-    const csv = records.map((row) => row.map((field) => `"${String(field ?? "").replaceAll('"', '""')}"`).join(",")).join("\r\n");
-    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `tickeven-ventas-${report?.event_id ?? "eventos"}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const exportCsv = async () => {
+    if (!eventId || exporting) return;
+    setExporting(true);
+    setExportError("");
+    setExportNotice("");
+    try {
+      const { data, error } = await requireSupabase().rpc("get_producer_ticket_sales_export", {
+        p_event_id: eventId,
+      });
+      if (error) throw error;
+      if (!Array.isArray(data)) throw new Error("Supabase devolvió un archivo de ventas inválido.");
+      if (!data.length) {
+        setExportNotice("Este evento aún no tiene entradas vendidas para exportar.");
+        return;
+      }
+
+      const csv = buildTicketSalesCsv(data);
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = createTicketSalesFilename(report?.title, eventId);
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setExportNotice(`CSV descargado con ${money.format(data.length)} entradas. Contiene datos personales; guárdalo de forma segura.`);
+    } catch (error) {
+      console.error("No se pudo exportar el detalle de entradas vendidas.", error);
+      setExportError(error.message || "No se pudo exportar el detalle de ventas.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
-    <section className="producer-dashboard-content">
+    <section className="producer-dashboard-content producer-sales-content">
       <div className="producer-dashboard-welcome">
-        <div><span className="producer-dashboard-kicker">INVENTARIO Y RECAUDACIÓN REAL</span><h2>Ventas de tus eventos</h2><p>Las cifras consideran órdenes aprobadas y reservas con vencimiento vigente.</p></div>
-        <button className="producer-dashboard-primary" type="button" onClick={exportCsv} disabled={!report}><BarChart3 size={16} /> Exportar CSV</button>
+        <div><span className="producer-dashboard-kicker">INVENTARIO Y RECAUDACIÓN REAL</span><h2>Ventas de tus eventos</h2><p>Ventas aprobadas, reservas vigentes y disponibilidad de entradas y productos.</p></div>
+        <button className="producer-dashboard-primary" type="button" onClick={() => void exportCsv()} disabled={!eventId || exporting}>
+          <Download size={16} /> {exporting ? "Preparando CSV…" : "Exportar entradas CSV"}
+        </button>
       </div>
-      <label className="producer-event-filter">Evento
+      <label className="producer-event-filter producer-sales-event-filter">Evento
         <select value={eventId} onChange={(event) => setEventId(event.target.value)}>
           {!events.length && <option value="">No hay eventos disponibles</option>}
           {events.map((event) => <option value={event.id} key={event.id}>{event.title}</option>)}
         </select>
       </label>
+      <p className="producer-sales-export-note"><Download size={14} /> El CSV contiene una fila por entrada e información personal de sus compradores. Mantén el archivo privado.</p>
+      {exportError && <p className="producer-portal-error" role="alert">{exportError}</p>}
+      {exportNotice && <p className="producer-sales-export-notice" role="status">{exportNotice}</p>}
       {errorMessage && <p className="producer-portal-error" role="alert">{errorMessage}</p>}
       {loading ? <p className="producer-dashboard-empty">Consultando ventas confirmadas…</p> : report ? (
         <>
@@ -659,28 +688,31 @@ function SalesTab({ events }) {
             </div>
           </div>
           <div className="producer-dashboard-list-card">
-            <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">INVENTARIO</span><h3>Tipos de entrada</h3></div></div>
-            <div className="producer-sales-table">
+            <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">INVENTARIO DE ENTRADAS</span><h3>Disponibilidad por tipo</h3></div></div>
+            <div className="producer-sales-table producer-inventory-table">
+              <div className="producer-sales-table__head" aria-hidden="true"><span>Tipo de entrada</span><span>Ocupación</span><span>Recaudación</span></div>
               {visibleTicketTypes.map((item) => (
                 <div className="producer-sales-table__row" key={item.id}>
-                  <span><strong>{item.name}</strong><small>{item.sold} vendidas · {item.reserved} reservadas · {item.available} disponibles</small><i><b style={{ width: `${item.capacity ? Math.min(100, item.sold / item.capacity * 100) : 0}%` }} /></i></span>
+                  <span><strong>{item.name}</strong><small>{money.format(item.sold)} vendidas · {money.format(item.reserved)} reservadas · {money.format(item.available)} disponibles de {money.format(item.capacity)}</small><i role="progressbar" aria-label={`Ocupación de ${item.name}`} aria-valuenow={item.capacity ? Math.round(item.sold / item.capacity * 100) : 0} aria-valuemin="0" aria-valuemax="100"><b style={{ width: `${item.capacity ? Math.min(100, item.sold / item.capacity * 100) : 0}%` }} /></i></span>
                   <strong>{item.capacity ? (item.sold / item.capacity * 100).toFixed(1) : "0.0"}%</strong>
                   <strong>${money.format(item.revenue_clp)}</strong>
                 </div>
               ))}
+              {!visibleTicketTypes.length && <p className="producer-dashboard-empty">Este evento aún no tiene tipos de entrada.</p>}
             </div>
           </div>
           <div className="producer-dashboard-list-card">
             <div className="producer-dashboard-list-card__heading"><div><span className="producer-dashboard-kicker">ADICIONALES Y MERCHANDISING</span><h3>Ventas e inventario de productos</h3></div></div>
-            <div className="producer-sales-table">
+            <div className="producer-sales-table producer-inventory-table">
+              <div className="producer-sales-table__head" aria-hidden="true"><span>Producto</span><span>Ocupación</span><span>Recaudación</span></div>
               {visibleProducts.map((item) => (
                 <div className="producer-sales-table__row" key={`${item.product_id}:${item.variant_id ?? "default"}`}>
-                  <span><strong>{item.name}{item.variant ? ` · ${item.variant}` : ""}</strong><small>{item.category} · {item.sold} vendidos · {item.reserved} reservados · {item.available} disponibles</small><i><b style={{ width: `${item.capacity ? Math.min(100, item.sold / item.capacity * 100) : 0}%` }} /></i></span>
+                  <span><strong>{item.name}{item.variant ? ` · ${item.variant}` : ""}</strong><small>{item.category} · {money.format(item.sold)} vendidos · {money.format(item.reserved)} reservados · {money.format(item.available)} disponibles de {money.format(item.capacity)}</small><i role="progressbar" aria-label={`Ocupación de ${item.name}`} aria-valuenow={item.capacity ? Math.round(item.sold / item.capacity * 100) : 0} aria-valuemin="0" aria-valuemax="100"><b style={{ width: `${item.capacity ? Math.min(100, item.sold / item.capacity * 100) : 0}%` }} /></i></span>
                   <strong>{item.capacity ? (item.sold / item.capacity * 100).toFixed(1) : "0.0"}%</strong>
                   <strong>${money.format(item.revenue_clp)}</strong>
                 </div>
               ))}
-              {!productData.inventory?.length && <p className="producer-dashboard-empty">Este evento aún no tiene productos asociados.</p>}
+              {!visibleProducts.length && <p className="producer-dashboard-empty">No hay productos para esta selección.</p>}
             </div>
           </div>
         </>

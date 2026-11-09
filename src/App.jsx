@@ -31,6 +31,7 @@ import { APP_URL, createUUID } from "./data/site.js";
 import { registerFreeOrder, validateDiscountCode } from "./data/supabase.js";
 
 const categories = ["Todos", "Conciertos", "Fiestas", "Festivales", "Experiencias", "Teatro", "Deportes", "Familia", "Conferencias"];
+const SUPPORT_EMAIL = "hola@tickeven.cl";
 const appBasePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 const CollaboratorDashboard = lazy(() => import("./components/CollaboratorDashboard.jsx"));
 
@@ -412,6 +413,112 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
           </div>
         </section>
 
+        <section className="legal-section page-container" aria-labelledby="legal-title">
+          <div className="legal-section__header">
+            <span className="section-kicker">INFORMACIÓN LEGAL</span>
+            <h2 id="legal-title">Términos, condiciones y soporte<span className="accent-dot">.</span></h2>
+          </div>
+
+          <div className="legal-section__grid">
+            <article className="legal-card" id="terminos">
+              <div className="legal-card__header">
+                <h3>Términos y condiciones</h3>
+                <span>Última actualización: 9 de noviembre de 2026</span>
+              </div>
+
+              <div className="legal-card__content">
+                <p><strong>Tickeven.cl</strong> es la plataforma tecnológica de venta y distribución de entradas digitales para eventos. El uso de la plataforma, así como la compra y uso de entradas, implica la aceptación de estas condiciones.</p>
+                <p>Al utilizar nuestra plataforma, registrarte, comprar o acceder a entradas, declaras haber leído y aceptado estos Términos y Condiciones, sin perjuicio de los derechos irrenunciables que te reconoce la legislación vigente.</p>
+
+                <h4>1. Identificación de la plataforma</h4>
+                <p>Tickeven es una plataforma tecnológica de venta y distribución de entradas digitales para eventos, que facilita la compra, validación y acceso a experiencias publicadas en la web.</p>
+                <ul>
+                  <li>Nombre comercial: Tickeven.</li>
+                  <li>Sitio web: <a href="https://tickeven.cl" target="_blank" rel="noreferrer">https://tickeven.cl</a></li>
+                  <li>Correo de contacto: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></li>
+                  <li>País de operación: Chile.</li>
+                </ul>
+
+                <h4>2. Definiciones</h4>
+                <p>Para efectos de estas condiciones, se entenderá por plataforma, usuario, comprador, organizador, evento, ticket y código QR, según corresponda a la operación y la normativa vigentes.</p>
+
+                <h4>3. Funcionamiento de TickEven</h4>
+                <p>Tickeven ofrece una infraestructura tecnológica para que productores publiquen eventos, comercialicen entradas y gestionen la venta, emisión y validación de accesos. La plataforma puede incorporar nuevas funcionalidades y mejoras, según lo requiera la operación.</p>
+
+                <h4>4. Registro y responsabilidad del usuario</h4>
+                <p>El usuario se compromete a entregar información verdadera, actualizada y completa, usar correos válidos y mantener la confidencialidad de sus credenciales. Tickeven podrá restringir o suspender cuentas cuando exista fraude, abuso, suplantación o incumplimiento.</p>
+
+                <h4>5. Condiciones de compra</h4>
+                <p>Antes de confirmar una compra, el comprador debe verificar la información del evento, la fecha, el lugar, la categoría, la cantidad, el valor total y las condiciones de acceso. Una vez validado el pago, se emitirá la entrada digital asociada a la operación.</p>
+
+                <h4>6. Precios y medios de pago</h4>
+                <p>Los precios se expresan en pesos chilenos, salvo indicación distinta. Los cargos por servicio o impuestos, si corresponden, deben ser informados antes de la confirmación. Los pagos se gestionan a través de medios habilitados por la plataforma y sujetos a sus condiciones.</p>
+
+                <h4>7. Emisión y entrega de entradas</h4>
+                <p>Las entradas adquiridas se entregan en formato digital y pueden enviarse al correo con el que se realizó la compra o quedar disponibles en los mecanismos habilitados por Tickeven. El comprador es responsable de conservar y proteger la entrada y su código QR.</p>
+
+                <h4>8. Validación y uso de códigos QR</h4>
+                <p>Cada entrada puede contar con un código QR único asociado a la compra y al evento. Una vez validado, el acceso queda registrado y la entrada no puede reutilizarse. En caso de múltiples copias, el sistema reconocerá la primera validación válida y podrá rechazar las demás.</p>
+
+                <h4>9. Cambios, cancelaciones y devoluciones</h4>
+                <p>Las entradas digitales corresponden a servicios asociados a eventos con fecha y condiciones específicas. En caso de cancelación definitiva del evento, reprogramación o modificación relevante, el comprador podrá solicitar la devolución de montos pagados conforme a la normativa vigente y a las condiciones que correspondan.</p>
+                <p>Las solicitudes de devolución podrán realizarse a través del soporte de Tickeven con la información de la compra y del evento. Tickeven gestionará la solicitud en forma razonable y conforme a la ley.</p>
+
+                <h4>10. Responsabilidades del organizador</h4>
+                <p>El organizador es responsable de la producción, operación, seguridad y estándares del evento, así como de informar adecuadamente condiciones de acceso, restricciones y modificaciones. Tickeven presta herramientas tecnológicas para facilitar la venta y control, pero no sustituye la responsabilidad del organizador sobre la ejecución del evento.</p>
+
+                <h4>11. Condiciones de acceso a los eventos</h4>
+                <p>El acceso estará sujeto a la normativa, restricción y requisitos informados por el organizador. El asistente debe presentar una entrada válida y cumplir con las condiciones de ingreso aplicables. El evento puede limitar el acceso por edad, horario, identificación, vestimenta u otros requisitos legales o de seguridad.</p>
+
+                <h4>12. Usos prohibidos</h4>
+                <p>Queda prohibido utilizar la plataforma para realizar compras fraudulentas, manipular entradas, duplicar códigos QR, suplantar identidad, interferir con el funcionamiento del sistema, acceder sin autorización o vulnerar la legislación aplicable.</p>
+
+                <h4>13. Disponibilidad y funcionamiento del servicio</h4>
+                <p>Tickeven hará esfuerzos razonables para mantener la plataforma disponible. Sin embargo, pueden existir interrupciones por mantenciones, fallas de conectividad, proveedores externos, eventos de seguridad u otros imprevistos sin control razonable.</p>
+
+                <h4>14. Propiedad intelectual</h4>
+                <p>Los elementos de Tickeven, como marca, logotipo, diseño, código, funcionalidades y contenidos originales, están protegidos por la normativa aplicable en materia de propiedad intelectual. Su reproducción, modificación o uso sin autorización está prohibido.</p>
+
+                <h4>15. Protección de datos personales</h4>
+                <p>Tickeven podrá tratar información personal para procesar compras, emitir entradas, gestionar cuentas, atender consultas, prevenir fraudes y cumplir obligaciones legales. El tratamiento se realizará conforme a la legislación chilena vigente sobre protección de datos personales.</p>
+
+                <h4>16. Comunicaciones electrónicas</h4>
+                <p>El usuario acepta recibir comunicaciones vinculadas con su compra, confirmaciones, cambios del evento, soporte y, cuando corresponda, información promocional autorizada. El usuario puede solicitar dejar de recibir comunicaciones promocionales sin afectar comunicaciones necesarias por la compra o servicios contratados.</p>
+
+                <h4>17. Limitaciones de responsabilidad</h4>
+                <p>Tickeven responderá por las obligaciones que le correspondan como proveedor tecnológico y comercializador de entradas, conforme a la ley. Nada en estos términos excluye derechos irrenunciables del consumidor ni responsabilidades que deban cumplir otras partes involucradas en un evento.</p>
+
+                <h4>18. Modificaciones</h4>
+                <p>Tickeven podrá actualizar estos Términos y Condiciones para reflejar cambios legales, técnicos o operativos. Las nuevas versiones se publicarán en Tickeven.cl y serán vigentes a partir de su publicación.</p>
+
+                <h4>19. Legislación aplicable</h4>
+                <p>Estos términos se interpretan conforme a las leyes de la República de Chile. Cualquier controversia será resuelta ante los tribunales competentes y, cuando corresponda, podrá elevarse ante el Servicio Nacional del Consumidor.</p>
+
+                <h4>20. Contacto y soporte</h4>
+                <p>Para consultas, asistencia, dudas sobre compras o cualquier inquietud relacionada con la plataforma, puedes comunicarte con Tickeven a través de:</p>
+                <ul>
+                  <li>Sitio web: <a href="https://tickeven.cl" target="_blank" rel="noreferrer">https://tickeven.cl</a></li>
+                  <li>Correo de soporte: <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a></li>
+                </ul>
+              </div>
+            </article>
+
+            <article className="legal-card" id="privacidad">
+              <div className="legal-card__header">
+                <h3>Política de privacidad</h3>
+                <span>Actualización: 9 de noviembre de 2026</span>
+              </div>
+
+              <div className="legal-card__content">
+                <p>Tickeven recolecta información necesaria para operar la plataforma, gestionar compras, emitir entradas, validar accesos, responder consultas y prevenir fraudes. Los datos pueden incluir nombre, identidad, correo electrónico, información de compra, datos del evento y datos de contacto.</p>
+                <p>La información será utilizada exclusivamente para prestar los servicios de Tickeven, cumplir obligaciones legales y mejorar la experiencia del usuario. Cuando sea necesario, podemos compartir datos con proveedores de pago, organizadores, proveedores tecnológicos o autoridades competentes, siempre con la mínima divulgación requerida.</p>
+                <p>Los usuarios pueden ejercer sus derechos de acceso, rectificación, eliminación, oposición y demás derechos reconocidos por la normativa vigente mediante el correo de soporte <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.</p>
+                <p>Las comunicaciones de compra, validación de acceso y atención de soporte pueden enviarse al correo registrado por el usuario. El usuario puede solicitar dejar de recibir comunicaciones promocionales, sin afectar las comunicaciones necesarias para la operación del servicio.</p>
+              </div>
+            </article>
+          </div>
+        </section>
+
       </main>
 
       <footer className="site-footer">
@@ -423,7 +530,7 @@ function HomePage({ cartCount, events, loading, error, onNavigate }) {
             </div>
             <div className="footer-links">
               <div><h3>EXPLORA</h3><a href="#eventos">Eventos</a><a href="#weekend-title">Este fin de semana</a><a href="#upcoming-title">Próximamente</a></div>
-              <div><h3>AYUDA</h3><a href="#ayuda">Preguntas frecuentes</a><a href="#contacto">Contacto soporte</a><a href="#comprar">¿Cómo comprar?</a></div>
+              <div><h3>AYUDA</h3><a href="#ayuda">Preguntas frecuentes</a><a href={`mailto:${SUPPORT_EMAIL}`}>Contacto soporte</a><a href="#comprar">¿Cómo comprar?</a></div>
               <div><h3>PARA PRODUCTORES</h3><a href="/productores" target="_blank" rel="noreferrer">Conoce la plataforma</a><a href="/productores#producer-faq" target="_blank" rel="noreferrer">Preguntas frecuentes</a></div>
               <div><h3>ACCESO A PORTALES</h3><a href={getBrowserPath("/productores/login")}>Iniciar sesión productores</a><a href={getBrowserPath("/admin/login")}>Portal administrador</a><a href={getBrowserPath("/colaboradores/login")}>Portal colaboradores</a></div>
               <div><h3>TICKEVEN.CL</h3><a href="#nosotros">Sobre nosotros</a><a href="#terminos">Términos y condiciones</a><a href="#privacidad">Política de privacidad</a></div>

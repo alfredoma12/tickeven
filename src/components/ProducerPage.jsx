@@ -35,6 +35,7 @@ export default function ProducerPage() {
       <footer className="producer-site-footer">
         <Brand />
         <span>© 2026 TickEven.cl · Herramientas para eventos.</span>
+        <a href="mailto:hola@tickeven.cl">Soporte: hola@tickeven.cl</a>
         <a href="/#eventos">Explorar eventos <ArrowUpRight size={14} /></a>
       </footer>
     </div>

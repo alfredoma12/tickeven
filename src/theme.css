@@ -1449,6 +1449,7 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
 
   .event-inventory-summary {
     display: inline-flex;
@@ -1487,19 +1488,49 @@ textarea:focus-visible {
   .event-products-section {
     display: grid;
     gap: 18px;
-    margin-top: 22px;
-    padding: 22px;
-    border: 1px solid #292932;
-    border-radius: 14px;
-    background: linear-gradient(145deg, #0d0d12, #09090d);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
+
+  .event-purchase-tabs {
+    display: flex;
+    gap: 18px;
+    border-bottom: 1px solid #292932;
+  }
+
+  .event-purchase-tabs button {
+    display: inline-flex;
+    min-height: 43px;
+    align-items: center;
+    gap: 8px;
+    padding: 0 3px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: #a1a1aa;
+    background: transparent;
+    font-size: 11px;
+    font-weight: 650;
+    cursor: pointer;
+  }
+
+  .event-purchase-tabs button.is-active {
+    border-bottom-color: var(--brand-accent);
+    color: #fff;
+  }
+
+  .event-purchase-tabs button:disabled { cursor: default; opacity: .7; }
+  .event-purchase-tabs button > span { display: grid; min-width: 18px; height: 18px; place-items: center; padding-inline: 5px; border-radius: 9px; color: #c8c8d0; background: #22222b; font-size: 9px; }
+  .event-ticket-section [role="tabpanel"] { min-width: 0; }
+  #event-tickets-panel { display: flex; flex-direction: column; gap: 15px; }
 
   .event-products-section > .event-detail-section-heading {
     margin: 0;
   }
 
   .event-products-section > .event-detail-section-heading > svg {
-    color: #c3a2ff;
+    color: #8fb8ff;
   }
 
   .event-products-grid {
@@ -1510,18 +1541,23 @@ textarea:focus-visible {
 
   .event-product-card {
     overflow: hidden;
-    border: 1px solid #292932;
-    border-radius: 12px;
+    border: 1px solid #30303a;
+    border-radius: 8px;
     background: #101015;
+    transition: border-color .2s ease, transform .2s ease;
   }
+
+  .event-product-card:hover { transform: translateY(-2px); border-color: #44444f; }
 
   .event-product-card > img {
     display: block;
     width: 100%;
-    height: 160px;
+    height: 150px;
     object-fit: cover;
     background: #17171e;
   }
+
+  .event-product-card__image-placeholder { display: grid; min-height: 150px; place-items: center; color: #8fb8ff; background: #17171e; }
 
   .event-product-card__content {
     display: grid;
@@ -1568,6 +1604,8 @@ textarea:focus-visible {
     font-weight: 500;
   }
 
+  .event-product-card__content > strong { color: #fff; font-size: 16px; }
+
   .event-product-card__content label {
     display: grid;
     gap: 6px;
@@ -1589,6 +1627,9 @@ textarea:focus-visible {
     color: #a1a1aa;
     font-size: 11px;
   }
+
+  .event-product-card__footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .event-products-empty { margin: 0; padding: 20px; border: 1px dashed #353540; border-radius: 8px; color: #a1a1aa; font-size: 12px; line-height: 1.6; }
 
   .event-product-card .quantity-control {
     width: fit-content;
@@ -1807,13 +1848,22 @@ textarea:focus-visible {
 
     .event-product-card {
       display: grid;
-      grid-template-columns: 110px minmax(0, 1fr);
+      grid-template-columns: 100px minmax(0, 1fr);
     }
 
-    .event-product-card > img {
+    .event-product-card > img,
+    .event-product-card__image-placeholder {
       height: 100%;
-      min-height: 185px;
+      min-height: 150px;
     }
+
+    .event-product-card__content { gap: 7px; padding: 11px; }
+    .event-product-card__content h3 { font-size: 13px; }
+    .event-product-card__content p { font-size: 10px; }
+    .event-product-card__content > strong { font-size: 14px; }
+    .event-product-card__footer { align-items: flex-start; flex-direction: column; gap: 8px; }
+    .event-purchase-tabs { gap: 13px; }
+    .event-purchase-tabs button { font-size: 10px; }
 
     .producer-product-variant {
       grid-template-columns: minmax(0, 1fr) 110px;
@@ -1857,7 +1907,6 @@ textarea:focus-visible {
       justify-self: start;
     }
   }
-}
 
 .event-card__example-badge {
   position: absolute;

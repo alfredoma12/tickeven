@@ -858,6 +858,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .event-buyer-card .event-detail-section-heading { margin-bottom: 12px; }
 .event-buyer-card .event-detail-section-heading > svg { color: var(--brand-accent); }
 .event-buyer-card > p { margin-bottom: 18px; }
+.event-buyer-card--confirmed { display: flex; flex-direction: column; gap: 8px; }
+.event-buyer-card--confirmed > p { margin: 0; }
+.event-buyer-card__edit { width: fit-content; min-height: 34px; padding: 0 11px; border: 1px solid #e1e3db; border-radius: 5px; color: #55594f; background: transparent; font-size: 9px; font-weight: 650; cursor: pointer; }
+.event-buyer-card__edit:hover { border-color: var(--brand-accent); color: var(--brand-deep); }
 .event-buyer-form { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
 .event-buyer-form > label:not(.event-buyer-form__terms) { display: flex; flex-direction: column; gap: 6px; color: #55594f; font-size: 9px; font-weight: 650; }
 .event-buyer-form input:not([type="checkbox"]) { width: 100%; min-height: 40px; padding: 0 10px; border: 1px solid #e1e3db; border-radius: 5px; color: #30332d; background: #fff; font-size: 10px; }

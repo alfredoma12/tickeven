@@ -197,7 +197,7 @@ async function createTicketPdf({
   qrToken,
   securityCode,
 }: {
-  ticket: { id: string; created_at: string; attendee_name: string };
+  ticket: { id: string; created_at: string; attendee_name: string; attendee_rut: string };
   ticketNumber: number;
   ticketCount: number;
   orderId: string;
@@ -273,6 +273,7 @@ async function createTicketPdf({
   drawLabel(pdf, "Hora", formatTime(event.starts_at), 20, 189, 78);
   drawLabel(pdf, "Recinto", [event.venue, event.city].filter(Boolean).join(" · "), 20, 208, 100);
   drawLabel(pdf, "Titular", ticket.attendee_name, 115, 151, 72);
+  drawLabel(pdf, "RUT", ticket.attendee_rut, 115, 170, 72);
 
   pdf.setFillColor(22, 17, 34);
   pdf.roundedRect(18, 220, pageWidth - 36, 25, 3, 3, "F");
@@ -487,7 +488,7 @@ Deno.serve(async (request: Request) => {
     const ticketTypeIds = [...new Set(items.map((item: OrderItem) => item.ticket_type_id))];
     const [{ data: tickets, error: ticketsError }, { data: events, error: eventsError }, { data: ticketTypes, error: typesError }] =
       await Promise.all([
-        admin.from("tickets").select("id, event_id, order_item_id, created_at").in("order_item_id", itemIds),
+        admin.from("tickets").select("id, event_id, order_item_id, created_at, attendee_name, attendee_rut").in("order_item_id", itemIds),
         admin.from("events").select("id, title, category, starts_at, venue, city, cover_url").in("id", eventIds),
         admin.from("ticket_types").select("id, event_id, name").in("event_id", eventIds).in("id", ticketTypeIds),
       ]);
@@ -565,7 +566,12 @@ Deno.serve(async (request: Request) => {
       const qrToken = await decryptCredential(secret.qr_token_encrypted, encryptionKey);
       const securityCode = await decryptCredential(secret.security_code_encrypted, encryptionKey);
       const pdf = await createTicketPdf({
-        ticket: { id: ticket.id, created_at: ticket.created_at, attendee_name: item.buyer_name },
+        ticket: {
+          id: ticket.id,
+          created_at: ticket.created_at,
+          attendee_name: ticket.attendee_name,
+          attendee_rut: ticket.attendee_rut,
+        },
         ticketNumber: index + 1,
         ticketCount: tickets.length,
         orderId,

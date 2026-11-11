@@ -717,6 +717,7 @@ function App() {
       ticketTypeId: ticketType.id,
       quantity: ticketType.quantity,
       buyer,
+      attendees: ticketType.attendees,
     }));
     const productAdditions = selectedProducts.map((product) => ({
       cartItemId: `${event.id}-${product.id}-${product.variantId ?? "default"}-${createUUID()}`,
@@ -746,7 +747,9 @@ function App() {
       const event = allEvents.find((candidate) => candidate.id === item.eventId);
       const ticketType = event?.ticketTypes.find((candidate) => candidate.id === item.ticketTypeId);
       const maxQuantity = ticketType ? Math.min(10, ticketType.available) : quantity;
-      return [{ ...item, quantity: Math.min(quantity, maxQuantity) }];
+      const attendeeLimit = item.attendees?.length ?? item.quantity;
+      const nextQuantity = Math.min(quantity, maxQuantity, attendeeLimit);
+      return [{ ...item, quantity: nextQuantity, attendees: item.attendees?.slice(0, nextQuantity) }];
     }));
   };
 
@@ -779,6 +782,7 @@ function App() {
         eventId: event.id,
         ticketTypeId: ticketType.id,
         quantity: ticketType.quantity,
+        attendees: ticketType.attendees,
       })),
     });
     window.sessionStorage.setItem(`tickeven:checkout:${order.id}`, checkoutKey);

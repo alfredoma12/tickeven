@@ -18,6 +18,7 @@ export function getCartLines(cart, events) {
           maxQuantity: Math.min(10, ticketType.available),
           quantity: item.quantity,
           buyer: item.buyer,
+          attendees: item.attendees,
         }]
       : [];
   });

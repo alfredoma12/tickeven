@@ -236,6 +236,9 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
                     {item.kind === "product" && <span>Retiro en {item.title}</span>}
                     {item.buyer && <span>Comprador: {item.buyer.name} · RUT {item.buyer.rut}</span>}
                     {item.buyer && <span>{item.buyer.email} · {item.buyer.phone}</span>}
+                    {item.kind !== "product" && item.attendees?.map((attendee, index) => (
+                      <span key={`${item.id}-attendee-${index}`}>{index === 0 ? "Titular" : "Asistente"}: {attendee.name} · RUT {attendee.rut}</span>
+                    ))}
                   </div>
                 </div>
               ))}

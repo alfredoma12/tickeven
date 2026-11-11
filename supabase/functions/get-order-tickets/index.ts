@@ -107,7 +107,7 @@ Deno.serve(async (request: Request) => {
   }
   const itemIds = (items ?? []).map((item) => item.id);
   const { data: tickets, error: ticketsError } = itemIds.length
-    ? await admin.from("tickets").select("id, order_item_id").in("order_item_id", itemIds)
+    ? await admin.from("tickets").select("id, order_item_id, attendee_name, attendee_rut").in("order_item_id", itemIds)
     : { data: [], error: null };
   if (ticketsError) {
     console.error("Could not load issued tickets.", ticketsError.message);
@@ -168,8 +168,8 @@ Deno.serve(async (request: Request) => {
         ticketType: ticketType.name,
         unitPriceClp: item.unit_price_clp,
         administrationFeeClp: item.administration_fee_clp,
-        attendeeName: item.buyer_name,
-        attendeeRut: item.buyer_rut,
+        attendeeName: ticket.attendee_name,
+        attendeeRut: ticket.attendee_rut,
         qrToken: await decryptCredential(secret.qr_token_encrypted, encryptionKey),
         securityCode: await decryptCredential(secret.security_code_encrypted, encryptionKey),
       };

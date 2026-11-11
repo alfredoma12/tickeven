@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { saveOrderItemAttendees, type OrderItemAttendees } from "../_shared/order-attendees.ts";
 
 const appOrigin = Deno.env.get("APP_ORIGIN");
 const corsHeaders = {
@@ -70,6 +71,7 @@ Deno.serve(async (request: Request) => {
   ) {
     return jsonResponse(400, { error: "invalid_buyer" });
   }
+  const normalizedItems: Array<Record<string, unknown>> = [];
   for (const item of items) {
     if (
       typeof item !== "object" || item === null ||
@@ -92,6 +94,25 @@ Deno.serve(async (request: Request) => {
         return jsonResponse(400, { error: "invalid_attendee" });
       }
     }
+    const fallbackAttendee = {
+      name: typeof item.buyer?.name === "string" ? item.buyer.name : buyer.name,
+      rut: typeof item.buyer?.rut === "string" ? item.buyer.rut : buyer.rut,
+    };
+    const rawAttendees = item.attendees ?? Array.from({ length: item.quantity }, () => fallbackAttendee);
+    if (!Array.isArray(rawAttendees) || rawAttendees.length !== item.quantity) {
+      return jsonResponse(400, { error: "invalid_attendee" });
+    }
+    const attendees = rawAttendees.map((attendee: Record<string, unknown>) => ({
+      name: typeof attendee?.name === "string" ? attendee.name.trim() : "",
+      rut: typeof attendee?.rut === "string" ? attendee.rut.trim() : "",
+    }));
+    if (attendees.some((attendee) =>
+      attendee.name.length < 2 || attendee.name.length > 120 ||
+      attendee.rut.length > 20 || !isValidRut(attendee.rut)
+    )) {
+      return jsonResponse(400, { error: "invalid_attendee" });
+    }
+    normalizedItems.push({ ...item, attendees });
   }
   for (const product of products) {
     if (
@@ -121,7 +142,7 @@ Deno.serve(async (request: Request) => {
     p_buyer_rut: buyer.rut.trim(),
     p_buyer_email: buyer.email.trim().toLowerCase(),
     p_buyer_phone: buyer.phone.trim(),
-    p_items: items,
+    p_items: normalizedItems,
     p_products: products,
     p_discount_code: typeof discountCode === "string" ? discountCode.trim().toUpperCase() || null : null,
   });
@@ -136,6 +157,14 @@ Deno.serve(async (request: Request) => {
 
   const order = Array.isArray(data) ? data[0] : data;
   if (!order) return jsonResponse(500, { error: "empty_order_response" });
+  if (order.order_status === "pending_payment") {
+    try {
+      await saveOrderItemAttendees(admin, order.order_id, normalizedItems as unknown as OrderItemAttendees[]);
+    } catch (error) {
+      console.error("Could not save attendees for pending order.", order.order_id, error);
+      return jsonResponse(500, { error: "order_attendees_save_failed" });
+    }
+  }
   return jsonResponse(201, {
     id: order.order_id,
     status: order.order_status,

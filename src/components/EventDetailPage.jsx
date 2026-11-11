@@ -66,6 +66,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
   const [rut, setRut] = useState("");
   const [rutError, setRutError] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [attendeeErrors, setAttendeeErrors] = useState({});
   const [registrationError, setRegistrationError] = useState("");
   const [isRegistering, setIsRegistering] = useState(false);
   const buyerFormRef = useRef(null);
@@ -90,6 +91,9 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
     [event, quantities],
   );
   const ticketCount = selectedTickets.reduce((sum, ticketType) => sum + ticketType.quantity, 0);
+  const additionalAttendeeTypes = selectedTickets.flatMap((ticketType) =>
+    Array.from({ length: ticketType.quantity }, () => ticketType.name),
+  ).slice(1);
   const ticketSubtotal = selectedTickets.reduce((sum, ticketType) => sum + ticketType.price * ticketType.quantity, 0);
   const selectedProducts = useMemo(() => (event?.products ?? []).flatMap((product) => {
     const variants = product.variants.filter((variant) => variant.id);
@@ -153,6 +157,31 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
       phone: String(formData.get("phone")).trim(),
     };
 
+    const additionalAttendees = additionalAttendeeTypes.map((_, index) => ({
+      name: String(formData.getAll("attendeeName")[index] ?? "").trim(),
+      rut: String(formData.getAll("attendeeRut")[index] ?? "").trim(),
+    }));
+    const nextAttendeeErrors = {};
+    additionalAttendees.forEach((attendee, index) => {
+      const errors = {};
+      if (attendee.name.length < 2 || attendee.name.length > 120) {
+        errors.name = "Ingresa un nombre de al menos 2 caracteres.";
+      }
+      if (!isValidRut(attendee.rut)) {
+        errors.rut = "Ingresa un RUT chileno válido.";
+      }
+      if (Object.keys(errors).length) nextAttendeeErrors[index] = errors;
+    });
+    setAttendeeErrors(nextAttendeeErrors);
+    if (Object.keys(nextAttendeeErrors).length) return;
+
+    const attendeeDetails = [{ name: buyer.name, rut: buyer.rut }, ...additionalAttendees];
+    let attendeeIndex = 0;
+    const ticketsWithAttendees = selectedTickets.map((ticketType) => ({
+      ...ticketType,
+      attendees: Array.from({ length: ticketType.quantity }, () => attendeeDetails[attendeeIndex++]),
+    }));
+
     setEmailError("");
     if (!isValidRut(buyer.rut)) {
       setRutError("Ingresa un RUT chileno válido.");
@@ -164,7 +193,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
     if (isFreeSelection && selectedProducts.length === 0) {
       setIsRegistering(true);
       try {
-        await onFreeRegister(event, selectedTickets, buyer);
+        await onFreeRegister(event, ticketsWithAttendees, buyer);
       } catch (error) {
         console.error("No se pudo completar la inscripción gratuita.", error);
         setRegistrationError(error.message || "No se pudo completar la inscripción gratuita. Inténtalo otra vez.");
@@ -173,7 +202,7 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
       }
       return;
     }
-    onAddToCart(event, selectedTickets, buyer, selectedProducts);
+    onAddToCart(event, ticketsWithAttendees, buyer, selectedProducts);
     onNavigate("/carrito");
   };
 
@@ -411,81 +440,6 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
                 </section>
               )}
 
-              {buyerFormOpen && (
-                <section className="event-buyer-card" ref={buyerFormRef} aria-labelledby="buyer-title">
-                  <div className="event-detail-section-heading">
-                    <div>
-                      <span className="event-detail-step">02 · TUS DATOS</span>
-                      <h2 id="buyer-title">{ticketCount ? "¿A quién enviamos las entradas?" : "¿A quién preparamos tu compra?"}</h2>
-                    </div>
-                    <UserRound size={20} />
-                  </div>
-                  <p>{isFreeSelection && !productCount
-                    ? "Al confirmar, emitiremos tus entradas gratuitas al instante. No necesitas carrito ni pasar por Mercado Pago."
-                    : "Al continuar, guardaremos tus datos para preparar tu compra. Los productos se retiran en el evento."}</p>
-                  <form className="event-buyer-form" onSubmit={submitBuyerDetails}>
-                    <label>Nombre y apellido
-                      <input name="name" autoComplete="name" placeholder="Como aparece en tu documento" required />
-                    </label>
-                    <label>RUT
-                      <input
-                        name="rut"
-                        autoComplete="off"
-                        placeholder="12.345.678-9"
-                        value={rut}
-                        aria-invalid={Boolean(rutError)}
-                        aria-describedby={rutError ? "event-rut-error" : undefined}
-                        onChange={(inputEvent) => { setRut(inputEvent.target.value); setRutError(""); }}
-                        onBlur={() => setRut((current) => formatRut(current))}
-                        required
-                      />
-                      {rutError && <span className="event-buyer-form__error" id="event-rut-error">{rutError}</span>}
-                    </label>
-                    <label>Correo electrónico
-                      <input
-                        id="event-buyer-email"
-                        name="email"
-                        type="email"
-                        autoComplete="email"
-                        placeholder="tu@correo.cl"
-                        aria-invalid={Boolean(emailError)}
-                        aria-describedby={emailError ? "event-email-error" : undefined}
-                        onChange={() => setEmailError("")}
-                        required
-                      />
-                    </label>
-                    <label>Confirma tu correo electrónico
-                      <input
-                        id="event-buyer-confirm-email"
-                        name="confirmEmail"
-                        type="email"
-                        autoComplete="email"
-                        placeholder="Repite tu correo"
-                        aria-invalid={Boolean(emailError)}
-                        aria-describedby={emailError ? "event-email-error" : undefined}
-                        onChange={() => setEmailError("")}
-                        required
-                      />
-                      {emailError && <span className="event-buyer-form__error" id="event-email-error">{emailError}</span>}
-                    </label>
-                    <label>Teléfono
-                      <input name="phone" type="tel" autoComplete="tel" placeholder="+56 9 1234 5678" required />
-                    </label>
-                    <label className="event-buyer-form__terms">
-                      <input type="checkbox" required />
-                      <span>{isFreeSelection
-                        ? <>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos para gestionar esta inscripción y sus entradas.</>
-                        : <>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos para preparar la compra y sus entradas.</>}</span>
-                    </label>
-                    {registrationError && <p className="event-buyer-form__error" role="alert">{registrationError}</p>}
-                    <button className="event-buyer-form__submit" type="submit" disabled={isRegistering}>
-                      {isRegistering
-                        ? "Preparando tus entradas…"
-                        : isFreeSelection ? "Confirmar inscripción gratuita" : "Guardar datos y continuar"} <ArrowRight size={17} />
-                    </button>
-                  </form>
-                </section>
-              )}
             </section>
 
             <aside className="event-order-card" aria-label="Resumen de entradas seleccionadas">
@@ -538,6 +492,128 @@ export default function EventDetailPage({ event, cartCount, onAddToCart, onFreeR
               )}
               <p className="event-order-card__secure"><Check size={14} /> {isFreeSelection && !productCount ? "Inscripción gratuita · Sin Mercado Pago" : "Compra única · productos asociados al evento."}</p>
             </aside>
+
+            {buyerFormOpen && (
+              <section className="event-buyer-card" ref={buyerFormRef} aria-labelledby="buyer-title">
+                <div className="event-detail-section-heading">
+                  <div>
+                    <span className="event-detail-step">02 · TUS DATOS</span>
+                    <h2 id="buyer-title">{ticketCount ? "¿A quién enviamos las entradas?" : "¿A quién preparamos tu compra?"}</h2>
+                  </div>
+                  <UserRound size={20} />
+                </div>
+                <p>{isFreeSelection && !productCount
+                  ? "Al confirmar, emitiremos tus entradas gratuitas al instante. No necesitas carrito ni pasar por Mercado Pago."
+                  : "Al continuar, guardaremos tus datos para preparar tu compra. Los productos se retiran en el evento."}</p>
+                <form className="event-buyer-form" onSubmit={submitBuyerDetails}>
+                  <label>Nombre y apellido
+                    <input name="name" autoComplete="name" placeholder="Como aparece en tu documento" required />
+                  </label>
+                  <label>RUT
+                    <input
+                      name="rut"
+                      autoComplete="off"
+                      placeholder="12.345.678-9"
+                      value={rut}
+                      aria-invalid={Boolean(rutError)}
+                      aria-describedby={rutError ? "event-rut-error" : undefined}
+                      onChange={(inputEvent) => { setRut(inputEvent.target.value); setRutError(""); }}
+                      onBlur={() => setRut((current) => formatRut(current))}
+                      required
+                    />
+                    {rutError && <span className="event-buyer-form__error" id="event-rut-error">{rutError}</span>}
+                  </label>
+                  <label>Correo electrónico
+                    <input
+                      id="event-buyer-email"
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="tu@correo.cl"
+                      aria-invalid={Boolean(emailError)}
+                      aria-describedby={emailError ? "event-email-error" : undefined}
+                      onChange={() => setEmailError("")}
+                      required
+                    />
+                  </label>
+                  <label>Confirma tu correo electrónico
+                    <input
+                      id="event-buyer-confirm-email"
+                      name="confirmEmail"
+                      type="email"
+                      autoComplete="email"
+                      placeholder="Repite tu correo"
+                      aria-invalid={Boolean(emailError)}
+                      aria-describedby={emailError ? "event-email-error" : undefined}
+                      onChange={() => setEmailError("")}
+                      required
+                    />
+                    {emailError && <span className="event-buyer-form__error" id="event-email-error">{emailError}</span>}
+                  </label>
+                  <label>Teléfono
+                    <input name="phone" type="tel" autoComplete="tel" placeholder="+56 9 1234 5678" required />
+                  </label>
+                  {additionalAttendeeTypes.length > 0 && (
+                    <div className="event-buyer-form__attendees">
+                      <div className="event-buyer-form__attendees-heading">
+                        <strong>Otras personas</strong>
+                        <span>El comprador queda como titular de la primera entrada. Todas las entradas llegarán a su correo.</span>
+                      </div>
+                      {additionalAttendeeTypes.map((ticketTypeName, index) => (
+                        <fieldset className="event-buyer-form__attendee" key={`${ticketTypeName}-${index}`}>
+                          <legend>Entrada {index + 2} · {ticketTypeName}</legend>
+                          <label>Nombre y apellido
+                            <input
+                              name="attendeeName"
+                              autoComplete="name"
+                              maxLength={120}
+                              placeholder="Nombre de quien usará la entrada"
+                              aria-invalid={Boolean(attendeeErrors[index]?.name)}
+                              aria-describedby={attendeeErrors[index]?.name ? `attendee-name-error-${index}` : undefined}
+                              onChange={() => setAttendeeErrors((current) => ({
+                                ...current,
+                                [index]: { ...current[index], name: "" },
+                              }))}
+                              required
+                            />
+                            {attendeeErrors[index]?.name && <span className="event-buyer-form__error" id={`attendee-name-error-${index}`}>{attendeeErrors[index].name}</span>}
+                          </label>
+                          <label>RUT
+                            <input
+                              name="attendeeRut"
+                              autoComplete="off"
+                              maxLength={20}
+                              placeholder="12.345.678-9"
+                              aria-invalid={Boolean(attendeeErrors[index]?.rut)}
+                              aria-describedby={attendeeErrors[index]?.rut ? `attendee-rut-error-${index}` : undefined}
+                              onChange={() => setAttendeeErrors((current) => ({
+                                ...current,
+                                [index]: { ...current[index], rut: "" },
+                              }))}
+                              onBlur={(inputEvent) => { inputEvent.target.value = formatRut(inputEvent.target.value); }}
+                              required
+                            />
+                            {attendeeErrors[index]?.rut && <span className="event-buyer-form__error" id={`attendee-rut-error-${index}`}>{attendeeErrors[index].rut}</span>}
+                          </label>
+                        </fieldset>
+                      ))}
+                    </div>
+                  )}
+                  <label className="event-buyer-form__terms">
+                    <input type="checkbox" required />
+                    <span>{isFreeSelection
+                        ? <>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos y de los demás asistentes para gestionar esta inscripción y sus entradas.</>
+                        : <>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos y de los demás asistentes para preparar la compra y sus entradas.</>}</span>
+                  </label>
+                  {registrationError && <p className="event-buyer-form__error" role="alert">{registrationError}</p>}
+                  <button className="event-buyer-form__submit" type="submit" disabled={isRegistering}>
+                    {isRegistering
+                      ? "Preparando tus entradas…"
+                      : isFreeSelection ? "Confirmar inscripción gratuita" : "Guardar datos y continuar"} <ArrowRight size={17} />
+                  </button>
+                </form>
+              </section>
+            )}
           </div>
         </div>
       </main>

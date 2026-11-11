@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { saveOrderItemAttendees, type OrderItemAttendees } from "../_shared/order-attendees.ts";
 
 const appOrigin = Deno.env.get("APP_ORIGIN");
 const corsHeaders = {
@@ -123,6 +124,7 @@ Deno.serve(async (request: Request) => {
   ) {
     return jsonResponse(400, { error: "invalid_buyer" });
   }
+  const normalizedItems: OrderItemAttendees[] = [];
   for (const item of items) {
     if (
       typeof item !== "object" || item === null ||
@@ -132,6 +134,27 @@ Deno.serve(async (request: Request) => {
     ) {
       return jsonResponse(400, { error: "invalid_order_item" });
     }
+    const fallbackAttendee = { name: buyer.name, rut: buyer.rut };
+    const rawAttendees = item.attendees ?? Array.from({ length: item.quantity }, () => fallbackAttendee);
+    if (!Array.isArray(rawAttendees) || rawAttendees.length !== item.quantity) {
+      return jsonResponse(400, { error: "invalid_attendee" });
+    }
+    const attendees = rawAttendees.map((attendee: Record<string, unknown>) => ({
+      name: typeof attendee?.name === "string" ? attendee.name.trim() : "",
+      rut: typeof attendee?.rut === "string" ? attendee.rut.trim() : "",
+    }));
+    if (attendees.some((attendee) =>
+      attendee.name.length < 2 || attendee.name.length > 120 ||
+      attendee.rut.length > 20 || !isValidRut(attendee.rut)
+    )) {
+      return jsonResponse(400, { error: "invalid_attendee" });
+    }
+    normalizedItems.push({
+      event_id: item.event_id,
+      ticket_type_id: item.ticket_type_id,
+      quantity: item.quantity,
+      attendees,
+    });
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -164,7 +187,7 @@ Deno.serve(async (request: Request) => {
     p_buyer_rut: buyer.rut.trim(),
     p_buyer_email: buyer.email.trim().toLowerCase(),
     p_buyer_phone: buyer.phone.trim(),
-    p_items: items,
+    p_items: normalizedItems,
     ...(rpcName === "create_free_order_with_discount"
       ? { p_discount_code: normalizedDiscountCode }
       : {}),
@@ -173,7 +196,7 @@ Deno.serve(async (request: Request) => {
   if (error) {
     console.error("create_free_order failed", error.message);
     const code = error.message.match(
-      /(?:insufficient_inventory|ticket_type_unavailable|invalid_buyer|invalid_items|invalid_quantity|order_not_free|discount_code_invalid|discount_code_inactive|discount_code_expired|discount_code_limit_reached|discount_code_event_mismatch|discount_code_unavailable|discount_code_already_applied|order_not_payable)/,
+      /(?:insufficient_inventory|ticket_type_unavailable|invalid_buyer|invalid_attendee|invalid_items|invalid_quantity|order_not_free|discount_code_invalid|discount_code_inactive|discount_code_expired|discount_code_limit_reached|discount_code_event_mismatch|discount_code_unavailable|discount_code_already_applied|order_not_payable)/,
     )?.[0] ?? "free_order_creation_failed";
     return jsonResponse(
       code === "insufficient_inventory" || code === "ticket_type_unavailable" || code === "discount_code_limit_reached" ? 409 : 400,
@@ -186,6 +209,12 @@ Deno.serve(async (request: Request) => {
   const order = Array.isArray(data) ? data[0] : data;
   if (!order) return jsonResponse(500, { error: "empty_order_response" });
   if (order.order_status !== "paid") {
+    try {
+      await saveOrderItemAttendees(admin, order.order_id, normalizedItems);
+    } catch (error) {
+      console.error("Could not save attendees for free order.", order.order_id, error);
+      return jsonResponse(500, { error: "order_attendees_save_failed" });
+    }
     const { data: orderItems, error: itemsError } = await admin
       .from("order_items")
       .select("id, quantity")

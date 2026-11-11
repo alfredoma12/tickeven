@@ -61,6 +61,7 @@ export async function createPendingOrder({ checkoutKey, lines, products = [], di
         ticket_type_id: String(line.ticketTypeId),
         quantity: line.quantity,
         buyer: line.buyer,
+        attendees: line.attendees,
       })),
       products: products.map((product) => ({
         product_id: product.productId,
@@ -140,6 +141,7 @@ export async function registerFreeOrder({ checkoutKey, buyer, items, discountCod
         event_id: String(item.eventId),
         ticket_type_id: String(item.ticketTypeId),
         quantity: item.quantity,
+        attendees: item.attendees,
       })),
       discount_code: discountCode || null,
     },
@@ -155,6 +157,7 @@ export async function registerFreeOrder({ checkoutKey, buyer, items, discountCod
       insufficient_inventory: "Ya no hay suficientes entradas gratuitas disponibles.",
       ticket_type_unavailable: "Este tipo de entrada gratuita ya no está disponible.",
       invalid_buyer: "Revisa los datos del asistente; el RUT debe ser válido.",
+      invalid_attendee: "Revisa el nombre y RUT de cada persona asociada a las entradas.",
       order_not_free: "Esta inscripción no corresponde a una entrada gratuita.",
       invalid_items: "Revisa las entradas y cantidades seleccionadas.",
       invalid_quantity: "La cantidad de entradas no es válida.",

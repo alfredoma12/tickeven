@@ -93,6 +93,11 @@ export default function CartPage({
                     <p>{item.venue}, {item.city}</p>
                     {item.buyer && <p className="cart-line__buyer">A nombre de {item.buyer.name} · {item.buyer.rut}</p>}
                     {item.buyer && <p className="cart-line__buyer">{item.buyer.email} · {item.buyer.phone}</p>}
+                    {item.kind !== "product" && item.attendees?.length > 1 && (
+                      <p className="cart-line__buyer">
+                        Otras personas: {item.attendees.slice(1).map((attendee) => `${attendee.name} · ${attendee.rut}`).join(", ")}
+                      </p>
+                    )}
                     <div className="cart-line__unit-prices">
                       <span>{item.kind === "product" ? "Producto" : "Entrada"} <strong>${money.format(item.ticketPrice)}</strong></span>
                       <span>Adm. ({ADMINISTRATION_PERCENTAGE}) por unidad <strong>${money.format(item.administrationFee)}</strong></span>
@@ -108,10 +113,13 @@ export default function CartPage({
                         <button
                           type="button"
                           aria-label={`Agregar una entrada de ${item.title}`}
-                          disabled={item.quantity >= item.maxQuantity}
+                          disabled={item.quantity >= Math.min(item.maxQuantity, item.attendees?.length ?? item.quantity)}
                           onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
                         ><Plus size={14} /></button>
                       </div>
+                      {item.kind !== "product" && item.quantity >= Math.min(item.maxQuantity, item.attendees?.length ?? item.quantity) && (
+                        <small className="cart-line__attendee-note">Para sumar entradas, vuelve al evento e ingresa sus titulares.</small>
+                      )}
                       <button className="cart-line__remove" type="button" onClick={() => onRemove(item.id)}>
                         <Trash2 size={14} /> Quitar
                       </button>

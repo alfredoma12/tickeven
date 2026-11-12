@@ -33,7 +33,7 @@ function loadMercadoPagoSdk() {
   return mercadoPagoSdkPromise;
 }
 
-export default function CheckoutPage({ lines, totals, discountCoupon }) {
+export default function CheckoutPage({ lines, totals, discountCoupon, onApplyDiscount, onClearDiscount }) {
   const [checkoutError, setCheckoutError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutKey] = useState(createUUID);
@@ -46,6 +46,7 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
   const [paymentStatus, setPaymentStatus] = useState("");
   const [preferenceId, setPreferenceId] = useState("");
   const [checkoutUrl, setCheckoutUrl] = useState("");
+  const [walletUnavailable, setWalletUnavailable] = useState(false);
   const search = new URLSearchParams(window.location.search);
   const returnOrderId = search.get("order_id");
   const paymentReturn = Boolean(returnOrderId && search.get("payment"));
@@ -96,12 +97,18 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
           initialization: { preferenceId },
           callbacks: {
             onError: () => {
-              if (active) setCheckoutError("No se pudo mostrar el botón de Mercado Pago. Usa el enlace alternativo para continuar.");
+              if (active) {
+                setWalletUnavailable(true);
+                setCheckoutError("No se pudo cargar el botón de pago de Mercado Pago. Puedes continuar con el enlace seguro.");
+              }
             },
           },
         });
       } catch (error) {
-        if (active) setCheckoutError(error.message || "No se pudo cargar el checkout de Mercado Pago.");
+        if (active) {
+          setWalletUnavailable(true);
+          setCheckoutError(error.message || "No se pudo cargar el checkout de Mercado Pago.");
+        }
       }
     };
 
@@ -229,6 +236,7 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
             onSubmit={async (event) => {
               event.preventDefault();
               setCheckoutError("");
+              setWalletUnavailable(false);
               setIsSubmitting(true);
               try {
                 const ticketLines = lines.filter((item) => item.kind !== "product");
@@ -269,19 +277,23 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
             }}
           >
             <section className="checkout-form__section">
-              <div className="checkout-form__section-title"><span>1</span><div><h2>Pago seguro</h2><p>Completarás el pago en el sitio seguro de Mercado Pago.</p></div></div>
-              <div className="checkout-payment-placeholder"><LockKeyhole size={15} /><span>TickEven no recibe ni almacena los datos de tu tarjeta. Las entradas se emiten después de confirmar el pago.</span></div>
+              <div className="checkout-form__section-title"><span>1</span><div><h2>Pago seguro</h2><p>{preferenceId ? "Continúa en Mercado Pago para elegir cómo pagar." : "Al continuar, prepararemos tu orden y te llevaremos al pago."}</p></div></div>
+              <div className="checkout-payment-placeholder"><LockKeyhole size={15} /><span>El pago se completa en Mercado Pago. TickEven no recibe ni almacena los datos de tu tarjeta; las entradas se emiten después de confirmar el pago.</span></div>
             </section>
             <label className="checkout-terms"><input type="checkbox" required /> <span>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos para gestionar esta orden y sus entradas.</span></label>
             {checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}
             {preferenceId ? (
               <div className="checkout-wallet">
-                <div id="walletBrick_container" aria-label="Pagar con Mercado Pago" />
-                {checkoutUrl && <a className="checkout-wallet__fallback" href={checkoutUrl}>Abrir checkout de Mercado Pago</a>}
+                {!walletUnavailable && <div id="walletBrick_container" aria-label="Continuar al pago en Mercado Pago" />}
+                {walletUnavailable && checkoutUrl && (
+                  <a className="checkout-submit checkout-wallet__fallback" href={checkoutUrl}>
+                    Continuar al pago seguro <ArrowRight size={16} />
+                  </a>
+                )}
               </div>
             ) : (
               <button className="checkout-submit" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Preparando pago seguro…" : "Continuar con Mercado Pago"} <ArrowRight size={16} />
+                {isSubmitting ? "Preparando tu orden…" : "Continuar al pago"} <ArrowRight size={16} />
               </button>
             )}
             <p className="checkout-secure-note"><ShieldCheck size={14} /> No compartimos datos de pago en este paso.</p>
@@ -307,7 +319,14 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
                 </div>
               ))}
             </div>
-            <PurchaseSummary totals={totals} hideAction note="El total final y cualquier descuento se validan nuevamente en el servidor." />
+            <PurchaseSummary
+              totals={totals}
+              hideAction
+              note="El total final y cualquier descuento se validan nuevamente en el servidor."
+              discountCoupon={discountCoupon}
+              onApplyDiscount={onApplyDiscount}
+              onClearDiscount={onClearDiscount}
+            />
             <a className="checkout-order__edit" href="/carrito"><ArrowLeft size={13} /> Editar carrito</a>
           </aside>
         </div>

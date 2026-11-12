@@ -825,6 +825,8 @@ function App() {
       lines={lines}
       totals={getCartTotals(lines, discountCoupon)}
       discountCoupon={discountCoupon}
+      onApplyDiscount={applyDiscount}
+      onClearDiscount={() => setDiscountCoupon(null)}
     />;
   }
 

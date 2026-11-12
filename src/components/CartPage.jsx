@@ -13,7 +13,46 @@ function PriceLine({ label, value, strong = false, discount = false }) {
   );
 }
 
-export function PurchaseSummary({ totals, actionLabel, onAction, disabled = false, note, hideAction = false }) {
+export function PurchaseSummary({
+  totals,
+  actionLabel,
+  onAction,
+  disabled = false,
+  note,
+  hideAction = false,
+  discountCoupon,
+  onApplyDiscount,
+  onClearDiscount,
+}) {
+  const [couponCode, setCouponCode] = useState(discountCoupon?.code ?? "");
+  const [couponError, setCouponError] = useState("");
+  const [couponBusy, setCouponBusy] = useState(false);
+
+  useEffect(() => {
+    setCouponCode(discountCoupon?.code ?? "");
+    setCouponError("");
+  }, [discountCoupon]);
+
+  const applyCoupon = async (event) => {
+    event.preventDefault();
+    setCouponError("");
+    setCouponBusy(true);
+    try {
+      const coupon = await onApplyDiscount(couponCode);
+      setCouponCode(coupon.code);
+    } catch (error) {
+      setCouponError(error.message || "No se pudo validar el código.");
+    } finally {
+      setCouponBusy(false);
+    }
+  };
+
+  const clearCoupon = () => {
+    onClearDiscount();
+    setCouponCode("");
+    setCouponError("");
+  };
+
   return (
     <section className="purchase-summary" aria-label="Resumen de compra">
       <h2>Resumen de compra</h2>
@@ -21,8 +60,47 @@ export function PurchaseSummary({ totals, actionLabel, onAction, disabled = fals
       {totals.productSubtotal > 0 && <PriceLine label="Productos adicionales" value={totals.productSubtotal} />}
       <PriceLine label={`Administración entradas (${ADMINISTRATION_PERCENTAGE})`} value={totals.ticketAdministrationTotal} />
       {totals.productAdministrationTotal > 0 && <PriceLine label={`Administración productos (${ADMINISTRATION_PERCENTAGE})`} value={totals.productAdministrationTotal} />}
-      {totals.discountTotal > 0 && <PriceLine label="Descuento aplicado" value={totals.discountTotal} discount />}
+      {totals.discountTotal > 0 && <PriceLine label={discountCoupon ? `Descuento · ${discountCoupon.code}` : "Descuento aplicado"} value={totals.discountTotal} discount />}
       <PriceLine label="Total" value={totals.total} strong />
+      {discountCoupon ? (
+        <div className="purchase-summary__coupon purchase-summary__coupon--applied" role="status">
+          <div className="purchase-summary__coupon-icon"><Check size={16} /></div>
+          <div className="purchase-summary__coupon-copy">
+            <strong>Código {discountCoupon.code}</strong>
+            <span>{discountCoupon.discount_type === "free"
+              ? "Entradas gratis"
+              : `${discountCoupon.discount_percent}% de descuento en entradas`}</span>
+          </div>
+          <button
+            className="purchase-summary__coupon-remove"
+            type="button"
+            onClick={clearCoupon}
+            aria-label="Quitar cupón de descuento"
+            title="Quitar cupón"
+          ><X size={15} /></button>
+        </div>
+      ) : (
+        <form className="purchase-summary__coupon" onSubmit={applyCoupon}>
+          <label htmlFor="purchase-summary-coupon">¿Tienes un cupón?</label>
+          <p>Los descuentos se aplican a las entradas del evento participante.</p>
+          <div className="purchase-summary__coupon-entry">
+            <Ticket size={16} aria-hidden="true" />
+            <input
+              id="purchase-summary-coupon"
+              value={couponCode}
+              maxLength={32}
+              autoCapitalize="characters"
+              autoComplete="off"
+              placeholder="Ingresa tu código"
+              onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+            />
+            <button type="submit" disabled={couponBusy || !couponCode.trim()}>
+              {couponBusy ? "…" : "Aplicar"}
+            </button>
+          </div>
+          {couponError && <p className="purchase-summary__coupon-error" role="alert">{couponError}</p>}
+        </form>
+      )}
       {!hideAction && (
         <button className="purchase-summary__action" type="button" disabled={disabled} onClick={onAction}>
           {actionLabel} <ArrowRight size={16} />
@@ -43,30 +121,9 @@ export default function CartPage({
   onRemove,
   onNavigate,
 }) {
-  const [couponCode, setCouponCode] = useState(discountCoupon?.code ?? "");
-  const [couponError, setCouponError] = useState("");
-  const [couponBusy, setCouponBusy] = useState(false);
-
   useEffect(() => {
     document.title = "Tu carrito — TickEven.cl";
   }, []);
-
-  useEffect(() => {
-    setCouponCode(discountCoupon?.code ?? "");
-  }, [discountCoupon]);
-
-  const applyCoupon = async (event) => {
-    event.preventDefault();
-    setCouponError("");
-    setCouponBusy(true);
-    try {
-      await onApplyDiscount(couponCode);
-    } catch (error) {
-      setCouponError(error.message || "No se pudo validar el código.");
-    } finally {
-      setCouponBusy(false);
-    }
-  };
 
   return (
     <main className="purchase-page">
@@ -131,41 +188,15 @@ export default function CartPage({
                   </strong>
                 </article>
               ))}
-              <section className="cart-coupon" aria-labelledby="cart-coupon-title">
-                <div className="cart-coupon__heading">
-                  <span><Ticket size={17} /></span>
-                  <div><h2 id="cart-coupon-title">¿Tienes un código de descuento?</h2><p>Los códigos pueden aplicar a las entradas de un evento.</p></div>
-                </div>
-                <form className="cart-coupon__form" onSubmit={applyCoupon}>
-                  <label className="sr-only" htmlFor="cart-discount-code">Código de descuento</label>
-                  <input
-                    id="cart-discount-code"
-                    value={couponCode}
-                    maxLength={32}
-                    autoCapitalize="characters"
-                    autoComplete="off"
-                    placeholder="Ingresa tu código"
-                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                  />
-                  <button type="submit" disabled={couponBusy || !couponCode.trim()}>
-                    {couponBusy ? "Validando…" : "Aplicar"}
-                  </button>
-                </form>
-                {couponError && <p className="cart-coupon__error" role="alert">{couponError}</p>}
-                {discountCoupon && (
-                  <div className="cart-coupon__applied" role="status">
-                    <Check size={16} />
-                    <span><strong>{discountCoupon.code}</strong> · {discountCoupon.discount_type === "free" ? "Entradas gratis" : `${discountCoupon.discount_percent}% en entradas`}</span>
-                    <button type="button" onClick={() => { onClearDiscount(); setCouponError(""); }} aria-label="Quitar código de descuento"><X size={15} /></button>
-                  </div>
-                )}
-              </section>
             </section>
             <PurchaseSummary
               totals={totals}
               actionLabel="Continuar al checkout"
               onAction={() => onNavigate("/checkout")}
               note="El costo de administración se detalla por cada entrada o producto."
+              discountCoupon={discountCoupon}
+              onApplyDiscount={onApplyDiscount}
+              onClearDiscount={onClearDiscount}
             />
           </div>
         ) : (

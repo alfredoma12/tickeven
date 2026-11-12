@@ -781,6 +781,10 @@ textarea:focus-visible {
   min-height: 46px;
 }
 
+.checkout-wallet__fallback {
+  color: #d7c6ff;
+}
+
 .checkout-form__section-title > span,
 .purchase-empty > span,
 .checkout-success > span {

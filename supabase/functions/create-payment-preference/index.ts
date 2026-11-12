@@ -52,7 +52,7 @@ Deno.serve(async (request: Request) => {
   });
   const { data: order, error: orderError } = await admin
     .from("orders")
-    .select("id, checkout_key, status, total_clp, expires_at, buyer_name, buyer_email, payment_checkout_url")
+    .select("id, checkout_key, status, total_clp, expires_at, buyer_name, buyer_email, payment_preference_id, payment_checkout_url")
     .eq("id", orderId)
     .eq("checkout_key", checkoutKey)
     .maybeSingle();
@@ -65,7 +65,10 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(409, { error: "order_not_payable" });
   }
   if (order.payment_checkout_url) {
-    return jsonResponse(200, { checkout_url: order.payment_checkout_url });
+    return jsonResponse(200, {
+      preference_id: order.payment_preference_id,
+      checkout_url: order.payment_checkout_url,
+    });
   }
 
   const [ticketItemsResult, productItemsResult] = await Promise.all([
@@ -160,5 +163,5 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(500, { error: "payment_preference_save_failed" });
   }
 
-  return jsonResponse(200, { checkout_url: checkoutUrl });
+  return jsonResponse(200, { preference_id: preference.id, checkout_url: checkoutUrl });
 });

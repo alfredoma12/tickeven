@@ -6,10 +6,11 @@
 2. En Supabase, copia la URL del proyecto y la **publishable key** a:
    - `VITE_SUPABASE_URL`
    - `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - `VITE_MERCADOPAGO_PUBLIC_KEY` (Public Key del ambiente de Mercado Pago que usará el checkout)
    - `VITE_APP_URL` (URL base pública; en local puedes usar `http://localhost:5173`)
-3. En GitHub Actions, configura las dos variables de Supabase como secrets; el workflow define `VITE_APP_URL=https://tickeven.cl`.
+3. En GitHub Actions, configura las variables como repository secrets; el workflow define `VITE_APP_URL=https://tickeven.cl`.
 
-La secret/service-role key nunca va en variables `VITE_*`, en el frontend ni en GitHub. Supabase la entrega dentro del entorno de Edge Functions. JWKS no se configura en el cliente.
+La secret/service-role key de Supabase y el Access Token de Mercado Pago nunca van en variables `VITE_*`, el frontend ni GitHub. Se guardan como secretos de Supabase Edge Functions. La Public Key de Mercado Pago sí se usa en el frontend. JWKS no se configura en el cliente.
 
 ## Desplegar el esquema y funciones
 

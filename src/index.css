@@ -1136,6 +1136,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .checkout-submit { display: flex; justify-content: center; align-items: center; gap: 8px; min-height: 43px; border: 0; border-radius: 5px; color: #fff; background: var(--brand-accent); font-size: 9px; font-weight: 700; cursor: pointer; }
 .checkout-submit:hover { background: var(--brand-deep); }
 .checkout-submit:disabled { opacity: .65; cursor: wait; }
+.checkout-wallet { display: grid; gap: 10px; }
+.checkout-wallet__fallback { justify-self: center; color: var(--brand-deep); font-size: 9px; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
 .checkout-error { margin: 0; color: #b42318; font-size: 9px; line-height: 1.5; }
 .checkout-secure-note { display: flex; align-items: center; justify-content: center; gap: 5px; margin: -4px 0 0; color: #858a7c; font-size: 8px; }
 .checkout-secure-note svg { color: var(--brand-accent); }

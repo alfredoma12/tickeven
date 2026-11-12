@@ -35,10 +35,12 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_MERCADOPAGO_PUBLIC_KEY: ${{ secrets.VITE_MERCADOPAGO_PUBLIC_KEY }}
           VITE_APP_URL: https://tickeven.cl
         run: |
           test -n "$VITE_SUPABASE_URL" || (echo "Missing VITE_SUPABASE_URL repository secret" && exit 1)
           test -n "$VITE_SUPABASE_PUBLISHABLE_KEY" || (echo "Missing VITE_SUPABASE_PUBLISHABLE_KEY repository secret" && exit 1)
+          test -n "$VITE_MERCADOPAGO_PUBLIC_KEY" || (echo "Missing VITE_MERCADOPAGO_PUBLIC_KEY repository secret" && exit 1)
           npm run build
           cp dist/index.html dist/404.html
           printf 'tickeven.cl\n' > dist/CNAME

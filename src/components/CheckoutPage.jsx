@@ -14,6 +14,24 @@ import { createUUID } from "../data/site.js";
 import { createMercadoPagoPreference, createPendingOrder, getPaidOrderTickets, registerFreeOrder } from "../data/supabase.js";
 
 const money = new Intl.NumberFormat("es-CL");
+let mercadoPagoSdkPromise;
+
+function loadMercadoPagoSdk() {
+  if (window.MercadoPago) return Promise.resolve(window.MercadoPago);
+  if (!mercadoPagoSdkPromise) {
+    mercadoPagoSdkPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://sdk.mercadopago.com/js/v2";
+      script.async = true;
+      script.onload = () => window.MercadoPago
+        ? resolve(window.MercadoPago)
+        : reject(new Error("No se pudo inicializar el SDK de Mercado Pago."));
+      script.onerror = () => reject(new Error("No se pudo cargar el SDK de Mercado Pago."));
+      document.head.appendChild(script);
+    });
+  }
+  return mercadoPagoSdkPromise;
+}
 
 export default function CheckoutPage({ lines, totals, discountCoupon }) {
   const [checkoutError, setCheckoutError] = useState("");
@@ -26,6 +44,8 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
   const [pdfError, setPdfError] = useState("");
   const [downloadingEvent, setDownloadingEvent] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("");
+  const [preferenceId, setPreferenceId] = useState("");
+  const [checkoutUrl, setCheckoutUrl] = useState("");
   const search = new URLSearchParams(window.location.search);
   const returnOrderId = search.get("order_id");
   const paymentReturn = Boolean(returnOrderId && search.get("payment"));
@@ -59,6 +79,38 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
   useEffect(() => {
     if (paymentReturn) void checkPayment();
   }, [paymentReturn, checkPayment]);
+
+  useEffect(() => {
+    if (!preferenceId) return undefined;
+    let active = true;
+    let walletBrick;
+
+    const renderWallet = async () => {
+      try {
+        const publicKey = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY;
+        if (!publicKey) throw new Error("Falta configurar la Public Key de Mercado Pago para este sitio.");
+        const MercadoPago = await loadMercadoPagoSdk();
+        if (!active) return;
+        const mercadoPago = new MercadoPago(publicKey, { locale: "es-CL" });
+        walletBrick = await mercadoPago.bricks().create("wallet", "walletBrick_container", {
+          initialization: { preferenceId },
+          callbacks: {
+            onError: () => {
+              if (active) setCheckoutError("No se pudo mostrar el botón de Mercado Pago. Usa el enlace alternativo para continuar.");
+            },
+          },
+        });
+      } catch (error) {
+        if (active) setCheckoutError(error.message || "No se pudo cargar el checkout de Mercado Pago.");
+      }
+    };
+
+    void renderWallet();
+    return () => {
+      active = false;
+      walletBrick?.unmount();
+    };
+  }, [preferenceId]);
 
   if (paymentReturn) {
     const ticketsByEvent = paymentTickets.reduce((groups, ticket) => {
@@ -203,7 +255,12 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
                   return;
                 }
                 const preference = await createMercadoPagoPreference({ orderId: createdOrder.id, checkoutKey });
-                window.location.assign(preference.checkout_url);
+                if (!preference.preference_id) {
+                  window.location.assign(preference.checkout_url);
+                  return;
+                }
+                setCheckoutUrl(preference.checkout_url);
+                setPreferenceId(preference.preference_id);
               } catch (error) {
                 setCheckoutError(error instanceof Error ? error.message : "No se pudo guardar la orden.");
               } finally {
@@ -217,9 +274,16 @@ export default function CheckoutPage({ lines, totals, discountCoupon }) {
             </section>
             <label className="checkout-terms"><input type="checkbox" required /> <span>Acepto los <a href="/terminos" target="_blank" rel="noreferrer">términos y condiciones</a> y autorizo el uso de mis datos para gestionar esta orden y sus entradas.</span></label>
             {checkoutError && <p className="checkout-error" role="alert">{checkoutError}</p>}
-            <button className="checkout-submit" type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Conectando con Mercado Pago…" : "Pagar con Mercado Pago"} <ArrowRight size={16} />
-            </button>
+            {preferenceId ? (
+              <div className="checkout-wallet">
+                <div id="walletBrick_container" aria-label="Pagar con Mercado Pago" />
+                {checkoutUrl && <a className="checkout-wallet__fallback" href={checkoutUrl}>Abrir checkout de Mercado Pago</a>}
+              </div>
+            ) : (
+              <button className="checkout-submit" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Preparando pago seguro…" : "Continuar con Mercado Pago"} <ArrowRight size={16} />
+              </button>
+            )}
             <p className="checkout-secure-note"><ShieldCheck size={14} /> No compartimos datos de pago en este paso.</p>
           </form>
 

@@ -92,6 +92,21 @@ async function triggerTicketEmail(
 Deno.serve(async (request: Request) => {
   if (request.method !== "POST") return jsonResponse(405, { error: "method_not_allowed" });
 
+  let payload: Record<string, unknown>;
+  try {
+    payload = await request.json();
+  } catch {
+    return jsonResponse(400, { error: "invalid_json" });
+  }
+  const url = new URL(request.url);
+  const notificationTypes = [
+    payload.type,
+    url.searchParams.get("type"),
+    url.searchParams.get("topic"),
+  ].filter((type): type is string => typeof type === "string" && type.length > 0);
+  if (notificationTypes.some((type) => type !== "payment" && type !== "topic_payment_wh")) {
+    return jsonResponse(200, { received: true, processed: false, ignored: true });
+  }
   const signatureSecret = Deno.env.get("MERCADOPAGO_WEBHOOK_SECRET");
   const accessToken = Deno.env.get("MERCADOPAGO_ACCESS_TOKEN");
   const encryptionSecret = Deno.env.get("TICKET_CREDENTIALS_ENCRYPTION_KEY");
@@ -102,16 +117,6 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(500, { error: "webhook_not_configured" });
   }
 
-  let payload: Record<string, unknown>;
-  try {
-    payload = await request.json();
-  } catch {
-    return jsonResponse(400, { error: "invalid_json" });
-  }
-  const data = typeof payload.data === "object" && payload.data !== null
-    ? payload.data as Record<string, unknown>
-    : {};
-  const url = new URL(request.url);
   const paymentId = String(url.searchParams.get("data.id") ?? "");
   if (!/^\d{1,30}$/.test(paymentId)) return jsonResponse(400, { error: "invalid_payment_id" });
   if (!await verifySignature(request, paymentId, signatureSecret)) {

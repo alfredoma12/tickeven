@@ -29,6 +29,16 @@ type OrderItem = {
   buyer_email: string;
 };
 
+type OrderProductItem = {
+  id: string;
+  event_id: string;
+  quantity: number;
+  unit_price_clp: number;
+  administration_fee_clp: number;
+  product_name: string;
+  variant_name: string | null;
+};
+
 const maxImageBytes = 250_000;
 const maxAttachmentBytes = 18 * 1024 * 1024;
 
@@ -193,6 +203,7 @@ async function createTicketPdf({
   event,
   eventCover,
   ticketType,
+  isProduct,
   logo,
   qrToken,
   securityCode,
@@ -204,6 +215,7 @@ async function createTicketPdf({
   event: EventDetails;
   eventCover: TicketImage | null;
   ticketType: string;
+  isProduct: boolean;
   logo: string;
   qrToken: string;
   securityCode: string;
@@ -226,14 +238,14 @@ async function createTicketPdf({
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(8);
   pdf.setTextColor(161, 161, 170);
-  pdf.text("ENTRADA DIGITAL", 17, 39);
+  pdf.text(isProduct ? "PRODUCTO PARA RETIRO" : "ENTRADA DIGITAL", 17, 39);
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(8);
   pdf.setTextColor(255, 255, 255);
   pdf.text(`${ticketNumber} / ${ticketCount}`, pageWidth - 15, 19, { align: "right" });
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7);
-  pdf.text("GUARDA ESTA ENTRADA", pageWidth - 15, 26, { align: "right" });
+  pdf.text(isProduct ? "GUARDA ESTE CÓDIGO" : "GUARDA ESTA ENTRADA", pageWidth - 15, 26, { align: "right" });
 
   pdf.setFillColor(13, 13, 18);
   pdf.setDrawColor(43, 43, 53);
@@ -259,16 +271,16 @@ async function createTicketPdf({
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(7);
   pdf.setTextColor(161, 161, 170);
-  pdf.text("PRESENTA ESTE QR", 167, 120, { align: "center" });
+  pdf.text(isProduct ? "PRESENTA ESTE QR PARA RETIRAR" : "PRESENTA ESTE QR", 167, 120, { align: "center" });
 
   pdf.setFont("helvetica", "bold");
   pdf.setFontSize(7);
   pdf.setTextColor(21, 91, 255);
-  pdf.text("DETALLES DE TU ENTRADA", 20, 119);
+  pdf.text(isProduct ? "DETALLES DE TU PRODUCTO" : "DETALLES DE TU ENTRADA", 20, 119);
   pdf.setDrawColor(43, 43, 53);
   pdf.line(20, 122, pageWidth - 20, 122);
   drawLabel(pdf, "Evento", event.title, 20, 132, 112);
-  drawLabel(pdf, "Tipo de entrada", ticketType, 20, 151, 78);
+  drawLabel(pdf, isProduct ? "Producto" : "Tipo de entrada", ticketType, 20, 151, 78);
   drawLabel(pdf, "Fecha", formatEventDate(event.starts_at), 20, 170, 78);
   drawLabel(pdf, "Hora", formatTime(event.starts_at), 20, 189, 78);
   drawLabel(pdf, "Recinto", [event.venue, event.city].filter(Boolean).join(" · "), 20, 208, 100);
@@ -289,12 +301,18 @@ async function createTicketPdf({
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(7);
   pdf.setTextColor(161, 161, 170);
-  pdf.text("Cada código QR corresponde a una sola entrada. Preséntala en el acceso del evento.", 18, 267);
+  pdf.text(
+    isProduct
+      ? "Cada código QR corresponde a una unidad. Preséntalo al retirar tu producto en el evento."
+      : "Cada código QR corresponde a una sola entrada. Preséntala en el acceso del evento.",
+    18,
+    267,
+  );
   pdf.text("No compartas el QR ni el código de seguridad antes de ingresar.", 18, 273);
   pdf.setDrawColor(43, 43, 53);
   pdf.line(18, 280, pageWidth - 18, 280);
   pdf.setFontSize(6);
-  pdf.text(`Folio de entrada: ${ticket.id}`, 18, 286, { maxWidth: 105 });
+  pdf.text(`${isProduct ? "Folio de producto" : "Folio de entrada"}: ${ticket.id}`, 18, 286, { maxWidth: 105 });
   pdf.text(`Orden: ${orderId}`, 18, 291, { maxWidth: 105 });
   pdf.text(`Emitida: ${formatEventDate(ticket.created_at)}`, pageWidth - 18, 286, { align: "right" });
   pdf.text("TickEven.cl · Hecho para vivirlo", pageWidth - 18, 291, { align: "right" });
@@ -444,16 +462,21 @@ Deno.serve(async (request: Request) => {
     }
   }
 
-  const { data: hasTicketItems, error: ticketItemCheckError } = await admin
-    .from("order_items")
-    .select("id")
-    .eq("order_id", orderId)
-    .limit(1);
-  if (ticketItemCheckError) {
-    console.error("Could not check paid order ticket items.", ticketItemCheckError.message);
+  const [{ data: hasTicketItems, error: ticketItemCheckError }, { data: hasProductItems, error: productItemCheckError }] =
+    await Promise.all([
+      admin.from("order_items").select("id").eq("order_id", orderId).limit(1),
+      admin.from("order_product_items").select("id").eq("order_id", orderId).limit(1),
+    ]);
+  if (ticketItemCheckError || productItemCheckError) {
+    console.error(
+      "Could not check paid order items.",
+      ticketItemCheckError?.message ?? productItemCheckError?.message,
+    );
     return jsonResponse(500, { error: "order_items_lookup_failed" });
   }
-  if (!hasTicketItems?.length) return jsonResponse(200, { received: true, delivery: "no_tickets" });
+  if (!hasTicketItems?.length && !hasProductItems?.length) {
+    return jsonResponse(200, { received: true, delivery: "no_tickets" });
+  }
 
   let claim: { claimed?: boolean; status?: string; attempt_id?: string };
   try {
@@ -476,51 +499,114 @@ Deno.serve(async (request: Request) => {
   }
 
   try {
-    const { data: items, error: itemsError } = await admin
-      .from("order_items")
-      .select("id, event_id, ticket_type_id, quantity, unit_price_clp, administration_fee_clp, buyer_name, buyer_email")
-      .eq("order_id", orderId);
-    if (itemsError) throw new Error(`Could not load order items: ${itemsError.message}`);
-    if (!items?.length) throw new Error("Paid order contains no ticket items.");
-
-    const itemIds = items.map((item: OrderItem) => item.id);
-    const eventIds = [...new Set(items.map((item: OrderItem) => item.event_id))];
-    const ticketTypeIds = [...new Set(items.map((item: OrderItem) => item.ticket_type_id))];
-    const [{ data: tickets, error: ticketsError }, { data: events, error: eventsError }, { data: ticketTypes, error: typesError }] =
+    const [{ data: items, error: itemsError }, { data: productItems, error: productItemsError }] =
       await Promise.all([
-        admin.from("tickets").select("id, event_id, order_item_id, created_at, attendee_name, attendee_rut").in("order_item_id", itemIds),
-        admin.from("events").select("id, title, category, starts_at, venue, city, cover_url").in("id", eventIds),
-        admin.from("ticket_types").select("id, event_id, name").in("event_id", eventIds).in("id", ticketTypeIds),
+        admin.from("order_items")
+          .select("id, event_id, ticket_type_id, quantity, unit_price_clp, administration_fee_clp, buyer_name, buyer_email")
+          .eq("order_id", orderId),
+        admin.from("order_product_items")
+          .select("id, event_id, quantity, unit_price_clp, administration_fee_clp, product_name, variant_name")
+          .eq("order_id", orderId),
       ]);
-    if (ticketsError || eventsError || typesError) {
-      throw new Error(`Could not load ticket details: ${ticketsError?.message ?? eventsError?.message ?? typesError?.message}`);
+    if (itemsError || productItemsError) {
+      throw new Error(`Could not load order items: ${itemsError?.message ?? productItemsError?.message}`);
+    }
+    const orderItems = (items ?? []) as OrderItem[];
+    const orderProductItems = (productItems ?? []) as OrderProductItem[];
+    if (!orderItems.length && !orderProductItems.length) {
+      throw new Error("Paid order contains no ticket or product items.");
     }
 
-    const expectedTicketCount = items.reduce((count: number, item: OrderItem) => count + item.quantity, 0);
-    if (!tickets?.length || tickets.length !== expectedTicketCount) {
-      throw new Error("Issued ticket count does not match the order.");
+    const itemIds = orderItems.map((item) => item.id);
+    const productItemIds = orderProductItems.map((item) => item.id);
+    const eventIds = [...new Set([
+      ...orderItems.map((item) => item.event_id),
+      ...orderProductItems.map((item) => item.event_id),
+    ])];
+    const ticketTypeIds = [...new Set(orderItems.map((item) => item.ticket_type_id))];
+    const [ticketResult, productTicketResult, eventsResult, typesResult] = await Promise.all([
+      itemIds.length
+        ? admin.from("tickets")
+          .select("id, event_id, order_item_id, order_product_item_id, created_at, attendee_name, attendee_rut")
+          .in("order_item_id", itemIds)
+        : Promise.resolve({ data: [], error: null }),
+      productItemIds.length
+        ? admin.from("tickets")
+          .select("id, event_id, order_item_id, order_product_item_id, created_at, attendee_name, attendee_rut")
+          .in("order_product_item_id", productItemIds)
+        : Promise.resolve({ data: [], error: null }),
+      admin.from("events")
+        .select("id, title, category, starts_at, venue, city, cover_url")
+        .in("id", eventIds),
+      ticketTypeIds.length
+        ? admin.from("ticket_types")
+          .select("id, event_id, name")
+          .in("event_id", eventIds)
+          .in("id", ticketTypeIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    const { data: tickets, error: ticketsError } = ticketResult;
+    const { data: productTickets, error: productTicketsError } = productTicketResult;
+    const { data: events, error: eventsError } = eventsResult;
+    const { data: ticketTypes, error: typesError } = typesResult;
+    if (ticketsError || productTicketsError || eventsError || typesError) {
+      throw new Error(
+        `Could not load ticket details: ${ticketsError?.message ?? productTicketsError?.message ?? eventsError?.message ?? typesError?.message}`,
+      );
     }
-    const itemById = new Map<string, OrderItem>(items.map((item: OrderItem) => [item.id, item]));
+
+    const allTickets = [...(tickets ?? []), ...(productTickets ?? [])];
+    const expectedTicketCount = orderItems.reduce((count, item) => count + item.quantity, 0);
+    const expectedProductCount = orderProductItems.reduce((count, item) => count + item.quantity, 0);
+    if (allTickets.length !== expectedTicketCount + expectedProductCount) {
+      throw new Error("Issued ticket and product QR counts do not match the order.");
+    }
+    const itemById = new Map<string, OrderItem>(orderItems.map((item) => [item.id, item]));
+    const productItemById = new Map<string, OrderProductItem>(orderProductItems.map((item) => [item.id, item]));
     const eventById = new Map<string, EventDetails>((events ?? []).map((event: EventDetails) => [event.id, event]));
     const typeById = new Map<string, { id: string; event_id: string; name: string }>(
       (ticketTypes ?? []).map((type) => [`${type.event_id}:${type.id}`, type]),
     );
-    for (const ticket of tickets) {
-      const item = itemById.get(ticket.order_item_id) as OrderItem | undefined;
-      if (!item || ticket.event_id !== item.event_id ||
-          !eventById.has(item.event_id) || !typeById.has(`${item.event_id}:${item.ticket_type_id}`)) {
-        throw new Error(`Ticket ${ticket.id} does not belong to this order.`);
+    const ticketCountsByLine = new Map<string, number>();
+    for (const ticket of allTickets) {
+      if (ticket.order_item_id && !ticket.order_product_item_id) {
+        const item = itemById.get(ticket.order_item_id);
+        if (!item || ticket.event_id !== item.event_id ||
+            !eventById.has(item.event_id) || !typeById.has(`${item.event_id}:${item.ticket_type_id}`)) {
+          throw new Error(`Ticket ${ticket.id} does not belong to this order.`);
+        }
+        const lineKey = `entry:${item.id}`;
+        ticketCountsByLine.set(lineKey, (ticketCountsByLine.get(lineKey) ?? 0) + 1);
+      } else if (ticket.order_product_item_id && !ticket.order_item_id) {
+        const item = productItemById.get(ticket.order_product_item_id);
+        if (!item || ticket.event_id !== item.event_id || !eventById.has(item.event_id)) {
+          throw new Error(`Product QR ${ticket.id} does not belong to this order.`);
+        }
+        const lineKey = `product:${item.id}`;
+        ticketCountsByLine.set(lineKey, (ticketCountsByLine.get(lineKey) ?? 0) + 1);
+      } else {
+        throw new Error(`QR ${ticket.id} is not linked to exactly one order item.`);
+      }
+    }
+    for (const item of orderItems) {
+      if (ticketCountsByLine.get(`entry:${item.id}`) !== item.quantity) {
+        throw new Error(`Issued ticket count does not match order item ${item.id}.`);
+      }
+    }
+    for (const item of orderProductItems) {
+      if (ticketCountsByLine.get(`product:${item.id}`) !== item.quantity) {
+        throw new Error(`Issued product QR count does not match order item ${item.id}.`);
       }
     }
 
-    const ticketIds = tickets.map((ticket) => ticket.id);
+    const ticketIds = allTickets.map((ticket) => ticket.id);
     const { data: secrets, error: secretsError } = await admin
       .from("ticket_delivery_secrets")
       .select("ticket_id, qr_token_encrypted, security_code_encrypted")
       .in("ticket_id", ticketIds);
     if (secretsError) throw new Error(`Could not load encrypted ticket credentials: ${secretsError.message}`);
-    if (!secrets || secrets.length !== tickets.length) {
-      throw new Error("Some issued tickets are missing encrypted credentials.");
+    if (!secrets || secrets.length !== allTickets.length) {
+      throw new Error("Some issued QR codes are missing encrypted credentials.");
     }
 
     const rawKey = fromBase64(encryptionSecret);
@@ -536,16 +622,27 @@ Deno.serve(async (request: Request) => {
       venue: string;
       city: string;
       ticketCount: number;
+      productCount: number;
       totalClp: number;
     }>();
     const attachments = [];
 
-    for (const [index, ticket] of tickets.entries()) {
-      const item = itemById.get(ticket.order_item_id) as OrderItem;
-      const event = eventById.get(item.event_id) as EventDetails;
-      const ticketType = typeById.get(`${item.event_id}:${item.ticket_type_id}`);
+    for (const [index, ticket] of allTickets.entries()) {
+      const orderItem = ticket.order_item_id ? itemById.get(ticket.order_item_id) : null;
+      const productItem = ticket.order_product_item_id
+        ? productItemById.get(ticket.order_product_item_id)
+        : null;
+      const item = productItem ?? orderItem;
+      if (!item) throw new Error(`QR ${ticket.id} is missing its order item.`);
+      const isProduct = Boolean(productItem);
+      const event = eventById.get(item.event_id);
+      const ticketType = orderItem
+        ? typeById.get(`${orderItem.event_id}:${orderItem.ticket_type_id}`)
+        : null;
       const secret = secretByTicketId.get(ticket.id);
-      if (!ticketType || !secret) throw new Error(`Ticket ${ticket.id} is missing event or credential data.`);
+      if (!event || (!isProduct && !ticketType) || !secret) {
+        throw new Error(`QR ${ticket.id} is missing event or credential data.`);
+      }
 
       const group = groupedEvents.get(event.id) ?? {
         id: event.id,
@@ -554,9 +651,11 @@ Deno.serve(async (request: Request) => {
         venue: event.venue,
         city: event.city,
         ticketCount: 0,
+        productCount: 0,
         totalClp: 0,
       };
-      group.ticketCount += 1;
+      if (isProduct) group.productCount += 1;
+      else group.ticketCount += 1;
       group.totalClp += item.unit_price_clp + item.administration_fee_clp;
       groupedEvents.set(event.id, group);
       if (!eventCoverById.has(event.id)) {
@@ -565,6 +664,10 @@ Deno.serve(async (request: Request) => {
 
       const qrToken = await decryptCredential(secret.qr_token_encrypted, encryptionKey);
       const securityCode = await decryptCredential(secret.security_code_encrypted, encryptionKey);
+      const displayType = productItem
+        ? [productItem.product_name, productItem.variant_name].filter(Boolean).join(" · ")
+        : ticketType?.name;
+      if (!displayType) throw new Error(`QR ${ticket.id} is missing its ticket type.`);
       const pdf = await createTicketPdf({
         ticket: {
           id: ticket.id,
@@ -573,17 +676,18 @@ Deno.serve(async (request: Request) => {
           attendee_rut: ticket.attendee_rut,
         },
         ticketNumber: index + 1,
-        ticketCount: tickets.length,
+        ticketCount: allTickets.length,
         orderId,
         event,
         eventCover: await eventCoverById.get(event.id)!,
-        ticketType: ticketType.name,
+        ticketType: displayType,
+        isProduct,
         logo,
         qrToken,
         securityCode,
       });
       attachments.push({
-        name: `tickeven-entrada-${ticket.id}.pdf`,
+        name: `tickeven-${isProduct ? "producto" : "entrada"}-${ticket.id}.pdf`,
         content: toBase64(pdf),
       });
     }
@@ -595,7 +699,8 @@ Deno.serve(async (request: Request) => {
     const { subject, html } = buildTicketEmail({
       buyerName: order.buyer_name,
       events: [...groupedEvents.values()],
-      ticketCount: tickets.length,
+      ticketCount: expectedTicketCount,
+      productCount: expectedProductCount,
       orderTotalClp: order.total_clp,
       appPublicUrl,
     });

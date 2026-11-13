@@ -151,8 +151,10 @@ export default function CheckoutPage({ lines, totals, discountCoupon, onApplyDis
               ? isFreeRegistration
                 ? "Tu inscripción gratuita está confirmada. Descarga el PDF y presenta el código QR en el acceso."
                 : paymentTickets.length
-                  ? "Mercado Pago confirmó la compra. Descarga el PDF de tus entradas y presenta el QR en el acceso."
-                  : "Mercado Pago confirmó tu compra. Tus productos adicionales se retiran en el evento."
+                  ? paymentProducts.length
+                    ? "Mercado Pago confirmó tu compra. Descarga las entradas y revisa tu correo: allí recibirás un QR PDF por cada producto para retirarlo en el evento."
+                    : "Mercado Pago confirmó la compra. Descarga el PDF de tus entradas y presenta el QR en el acceso."
+                  : "Mercado Pago confirmó tu compra. Recibirás por correo un QR PDF individual por cada producto para retirarlo en el evento."
               : search.get("payment") === "failure"
                 ? "Mercado Pago no confirmó el pago. No se emitieron entradas. Puedes comprobar nuevamente el estado por si el aviso llegó antes que la notificación."
               : "La confirmación puede tardar unos segundos. Las entradas solo aparecen después de verificar el pago con Mercado Pago."}</p>
@@ -195,6 +197,7 @@ export default function CheckoutPage({ lines, totals, discountCoupon, onApplyDis
                 {paymentProducts.map((product) => (
                   <p key={product.id}>{product.quantity} × {product.name}{product.variant ? ` · ${product.variant}` : ""} · Retiro en {product.eventTitle}</p>
                 ))}
+                <p>Enviaremos un QR individual por cada unidad al correo de compra. Cada código permite un solo retiro.</p>
               </section>
             )}
             <a href="/">Volver a eventos <ArrowRight size={15} /></a>

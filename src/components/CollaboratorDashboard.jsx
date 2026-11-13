@@ -6,8 +6,8 @@ import { requireSupabase } from "../data/supabase.js";
 import Brand from "./Brand.jsx";
 
 const validationMessages = {
-  already_used: "Esta entrada ya fue utilizada.",
-  not_found: "No encontramos una entrada válida con esos datos para tus eventos asignados.",
+  already_used: "Este código ya fue utilizado.",
+  not_found: "No encontramos un código válido para tus eventos asignados.",
   invalid_credentials: "Los datos del código no son válidos.",
   account_not_approved: "La cuenta no tiene autorización para validar entradas.",
   event_not_assigned: "No tienes permiso para validar entradas de este evento.",
@@ -378,7 +378,7 @@ export default function CollaboratorDashboard({ onNavigate }) {
         <section className="access-dashboard">
           <div className="access-toolbar">
             <div>
-              <span className="access-kicker">VALIDADOR DE ENTRADAS</span>
+              <span className="access-kicker">VALIDADOR DE CÓDIGOS</span>
               <h1>Control de acceso<span>.</span></h1>
               <p>{profile?.full_name || "Colaborador"}<i />{activeEvent?.venue || "Evento asignado"}{activeEvent?.city ? ` · ${activeEvent.city}` : ""}</p>
             </div>
@@ -411,19 +411,24 @@ export default function CollaboratorDashboard({ onNavigate }) {
                     {validation && <article className={`access-result access-result--${resultKind}`} role="alert" aria-live="assertive">
                       <div className="access-result__icon">{resultKind === "authorized" ? <Check size={34} strokeWidth={3} /> : resultKind === "used" || resultKind === "rejected" ? <CircleX size={34} strokeWidth={2.5} /> : <TriangleAlert size={34} strokeWidth={2.5} />}</div>
                       <span className="access-result__eyebrow">{activeEvent?.title || "Evento"}</span>
-                      <h2>{resultKind === "authorized" ? "¡ACCESO AUTORIZADO!" : resultKind === "used" ? "ENTRADA YA VALIDADA" : resultKind === "warning" ? "ENTRADA DE OTRO EVENTO" : resultKind === "unavailable" ? "VALIDACIÓN NO DISPONIBLE" : "ENTRADA NO VÁLIDA"}</h2>
-                      <p className="access-result__summary">{validation.message || validationMessages[validation.reason] || (validation.valid ? "Entrada confirmada por el servidor." : "El servidor no pudo autorizar esta entrada.")}</p>
+                      <h2>{resultKind === "authorized"
+                        ? validation.ticket_kind === "product" ? "¡PRODUCTO LISTO PARA RETIRO!" : "¡ACCESO AUTORIZADO!"
+                        : resultKind === "used"
+                          ? validation.ticket_kind === "product" ? "PRODUCTO YA RETIRADO" : "ENTRADA YA VALIDADA"
+                          : resultKind === "warning" ? validation.ticket_kind === "product" ? "PRODUCTO DE OTRO EVENTO" : "ENTRADA DE OTRO EVENTO"
+                          : resultKind === "unavailable" ? "VALIDACIÓN NO DISPONIBLE" : "CÓDIGO NO VÁLIDO"}</h2>
+                      <p className="access-result__summary">{validation.message || validationMessages[validation.reason] || (validation.valid ? "Código confirmado por el servidor." : "El servidor no pudo autorizar este código.")}</p>
                       {(validation.event_title || validation.attendee_name || validation.ticket_type || validation.ticket_id) && <dl className="access-result__details">
                         {validation.attendee_name && <div><dt>Titular</dt><dd>{validation.attendee_name}</dd></div>}
                         {validation.attendee_rut && <div><dt>RUT</dt><dd>{validation.attendee_rut}</dd></div>}
                         {validation.event_title && <div><dt>{resultKind === "warning" ? "Evento de la entrada" : "Evento"}</dt><dd>{validation.event_title}</dd></div>}
-                        {validation.ticket_type && <div><dt>Tipo de entrada</dt><dd>{validation.ticket_type}</dd></div>}
-                        {validation.ticket_id && <div><dt>Entrada</dt><dd>…{String(validation.ticket_id).slice(-8).toUpperCase()}</dd></div>}
+                        {validation.ticket_type && <div><dt>{validation.ticket_kind === "product" ? "Producto" : "Tipo de entrada"}</dt><dd>{validation.ticket_type}</dd></div>}
+                        {validation.ticket_id && <div><dt>{validation.ticket_kind === "product" ? "Código" : "Entrada"}</dt><dd>…{String(validation.ticket_id).slice(-8).toUpperCase()}</dd></div>}
                         {validation.checked_in_at && <div><dt>Primera validación</dt><dd>{formatDateTime(validation.checked_in_at)}</dd></div>}
                         {validation.checked_in_by && <div><dt>Validada por</dt><dd>{validation.checked_in_by === profile?.id ? profile?.full_name : validation.checked_in_by}</dd></div>}
                         {validation.valid && <div><dt>Validada ahora</dt><dd>{formatDateTime(validation.checked_in_at)}</dd></div>}
                       </dl>}
-                      <button className="access-result__next" type="button" onClick={continueScanning}><Check size={18} /> OK - SIGUIENTE ENTRADA</button>
+                      <button className="access-result__next" type="button" onClick={continueScanning}><Check size={18} /> OK - SIGUIENTE CÓDIGO</button>
                     </article>}
                   </div>
                   <div className="access-scanner__controls">
@@ -433,10 +438,10 @@ export default function CollaboratorDashboard({ onNavigate }) {
                     <span><ScanLine size={15} />{cameraState === "scanning" ? "La cámara permanece activa entre lecturas" : "Se requiere cámara y conexión segura"}</span>
                   </div>
                   <div className="access-manual">
-                    <div className="access-manual__title"><CircleAlert size={17} /><div><strong>¿Problemas con el código QR?</strong><span>Ingresa el código impreso en la entrada.</span></div></div>
+                    <div className="access-manual__title"><CircleAlert size={17} /><div><strong>¿Problemas con el código QR?</strong><span>Ingresa el código de seguridad impreso.</span></div></div>
                     <form onSubmit={submitSecurityCode}>
-                      <input aria-label="Código de seguridad de la entrada" inputMode="text" autoComplete="off" autoCapitalize="characters" maxLength={40} value={securityCode} onChange={(event) => setSecurityCode(event.target.value.toUpperCase())} placeholder="CÓDIGO DE ENTRADA" disabled={busy || Boolean(validation)} />
-                      <button type="submit" disabled={busy || Boolean(validation) || !securityCode.trim() || !selectedEventId}>{busy ? "Validando…" : "VALIDAR ENTRADA"}</button>
+                      <input aria-label="Código de seguridad" inputMode="text" autoComplete="off" autoCapitalize="characters" maxLength={40} value={securityCode} onChange={(event) => setSecurityCode(event.target.value.toUpperCase())} placeholder="CÓDIGO DE SEGURIDAD" disabled={busy || Boolean(validation)} />
+                      <button type="submit" disabled={busy || Boolean(validation) || !securityCode.trim() || !selectedEventId}>{busy ? "Validando…" : "VALIDAR CÓDIGO"}</button>
                     </form>
                   </div>
                   {message && <p className="access-inline-message" role="alert"><CircleAlert size={15} />{message}</p>}
@@ -445,21 +450,21 @@ export default function CollaboratorDashboard({ onNavigate }) {
                 <aside className="access-side-panel">
                   <section className="access-event-card"><span className="access-kicker">EVENTO ACTIVO</span><h2>{activeEvent?.title || "Selecciona un evento"}</h2><p>{activeEvent?.venue || ""}{activeEvent?.city ? ` · ${activeEvent.city}` : ""}</p>{activeEvent?.starts_at && <span className="access-event-card__date"><Clock3 size={14} />{formatDateTime(activeEvent.starts_at)}</span>}</section>
                   <section className="access-stats"><div className="access-section-heading"><span className="access-kicker">ESTADÍSTICAS DEL EVENTO</span><span>{dashboardData ? "EN VIVO · 10 S" : "SIN SINCRONIZAR"}</span></div><div className="access-stats__grid">
-                    <article><span>Entradas vendidas</span><strong>{dashboardData?.stats?.sold ?? "—"}</strong><small>Total emitidas</small></article>
-                    <article className="is-success"><span>Entradas validadas</span><strong>{dashboardData?.stats?.validated ?? "—"}</strong><small>Accesos confirmados</small></article>
+                    <article><span>Códigos emitidos</span><strong>{dashboardData?.stats?.sold ?? "—"}</strong><small>Entradas y productos</small></article>
+                    <article className="is-success"><span>Códigos utilizados</span><strong>{dashboardData?.stats?.validated ?? "—"}</strong><small>Accesos y retiros</small></article>
                     <article><span>Pendientes</span><strong>{dashboardData?.stats?.pending ?? "—"}</strong><small>Sin utilizar</small></article>
                     <article><span>Porcentaje de acceso</span><strong>{dashboardData ? `${dashboardData.stats.percent}%` : "—"}</strong><small>Del total vendido</small></article>
                   </div></section>
-                  <section className="access-activity"><div className="access-section-heading"><span className="access-kicker">MI ACTIVIDAD</span><span>{profile?.full_name}</span></div><div className="access-activity__rows"><div><span>Validaciones procesadas</span><strong>{dashboardData?.activity?.attempts ?? "—"}</strong></div><div><span>Accesos autorizados</span><strong>{dashboardData?.activity?.authorized ?? "—"}</strong></div><div><span>Entradas ya utilizadas</span><strong>{dashboardData?.activity?.already_used ?? "—"}</strong></div><div><span>Último acceso autorizado</span><strong>{dashboardData?.activity?.last_attendee || "Sin registros"}</strong></div><div><span>Hora de última autorización</span><strong>{formatDateTime(dashboardData?.activity?.last_validation)}</strong></div></div></section>
+                  <section className="access-activity"><div className="access-section-heading"><span className="access-kicker">MI ACTIVIDAD</span><span>{profile?.full_name}</span></div><div className="access-activity__rows"><div><span>Códigos procesados</span><strong>{dashboardData?.activity?.attempts ?? "—"}</strong></div><div><span>Usos autorizados</span><strong>{dashboardData?.activity?.authorized ?? "—"}</strong></div><div><span>Códigos ya utilizados</span><strong>{dashboardData?.activity?.already_used ?? "—"}</strong></div><div><span>Último titular o comprador</span><strong>{dashboardData?.activity?.last_attendee || "Sin registros"}</strong></div><div><span>Hora de última autorización</span><strong>{formatDateTime(dashboardData?.activity?.last_validation)}</strong></div></div></section>
                 </aside>
               </div>
 
-              <section className="access-history"><div className="access-section-heading"><div><span className="access-kicker">HISTORIAL</span><h2>Últimas entradas procesadas</h2></div><span>{dashboardData?.history?.length ?? 0} registros</span></div>
+              <section className="access-history"><div className="access-section-heading"><div><span className="access-kicker">HISTORIAL</span><h2>Últimos códigos procesados</h2></div><span>{dashboardData?.history?.length ?? 0} registros</span></div>
                 {dashboardData?.history?.length ? <div className="access-history__table"><div className="access-history__head"><span>TITULAR</span><span>RUT</span><span>TIPO</span><span>HORA</span><span>RESULTADO</span></div>{dashboardData.history.map((item) => <article key={item.id}><strong>{item.attendee_name}</strong><span>{item.attendee_rut || "—"}</span><span>{item.ticket_type || "—"}</span><span>{formatDateTime(item.attempted_at)}</span><span className={`access-history__result access-history__result--${item.outcome}`}><i />{historyLabels[item.outcome] || item.outcome}</span></article>)}</div> : <div className="access-history__empty">Las validaciones de este evento aparecerán aquí.</div>}
               </section>
             </>
           )}
-          <aside className="access-security-note"><ShieldCheck size={16} /><span>Las entradas se verifican en el servidor. Sin confirmación no se autoriza el acceso; cada entrada admite un solo ingreso.</span></aside>
+          <aside className="access-security-note"><ShieldCheck size={16} /><span>Las entradas y los productos se verifican en el servidor. Sin confirmación no se autoriza el acceso ni el retiro; cada código admite un solo uso.</span></aside>
         </section>
         <footer className="producer-dashboard-footer"><span>Si no tienes acceso a un evento, solicita la asignación al administrador.</span><a href="/">Volver al sitio <Ticket size={13} /></a></footer>
       </main>

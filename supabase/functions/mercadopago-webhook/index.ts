@@ -229,6 +229,14 @@ Deno.serve(async (request: Request) => {
     console.error("Could not load items for approved order.", itemsError?.message);
     return jsonResponse(500, { error: "order_items_lookup_failed" });
   }
+  const { data: productItems, error: productItemsError } = await admin
+    .from("order_product_items")
+    .select("id, quantity")
+    .eq("order_id", orderId);
+  if (productItemsError) {
+    console.error("Could not load products for approved order.", productItemsError.message);
+    return jsonResponse(500, { error: "order_products_lookup_failed" });
+  }
 
   let encryptionKey: CryptoKey;
   try {
@@ -240,7 +248,7 @@ Deno.serve(async (request: Request) => {
     return jsonResponse(500, { error: "ticket_encryption_not_configured" });
   }
 
-  const tickets = [];
+  const tickets: Record<string, string>[] = [];
   for (const item of items ?? []) {
     for (let index = 0; index < item.quantity; index += 1) {
       const qrToken = toBase64(crypto.getRandomValues(new Uint8Array(32)))
@@ -248,6 +256,20 @@ Deno.serve(async (request: Request) => {
       const securityCode = createSecurityCode();
       tickets.push({
         order_item_id: item.id,
+        qr_token: qrToken,
+        security_code: securityCode,
+        qr_token_encrypted: await encryptCredential(qrToken, encryptionKey),
+        security_code_encrypted: await encryptCredential(securityCode, encryptionKey),
+      });
+    }
+  }
+  for (const item of productItems ?? []) {
+    for (let index = 0; index < item.quantity; index += 1) {
+      const qrToken = toBase64(crypto.getRandomValues(new Uint8Array(32)))
+        .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+      const securityCode = createSecurityCode();
+      tickets.push({
+        order_product_item_id: item.id,
         qr_token: qrToken,
         security_code: securityCode,
         qr_token_encrypted: await encryptCredential(qrToken, encryptionKey),

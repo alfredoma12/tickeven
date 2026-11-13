@@ -35,6 +35,36 @@ test("summarizes multiple events, dates, and the total ticket count", () => {
   assert.match(html, /https:\/\/tickeven\.cl\/tickevenlogo\.png/);
 });
 
+test("describes individual product redemption codes in product-only emails", () => {
+  const { subject, html } = buildTicketEmail({
+    buyerName: "Alfredo",
+    events: [{ title: "Festival", startsAt: null, ticketCount: 0, productCount: 2, totalClp: 12000 }],
+    ticketCount: 0,
+    productCount: 2,
+    orderTotalClp: 12000,
+    appPublicUrl: "https://tickeven.cl",
+  });
+  assert.equal(subject, "Tus 2 códigos de retiro están listos | TickEven");
+  assert.match(html, /2 productos/);
+  assert.match(html, /Cada unidad de producto tiene su propio QR en PDF adjunto/);
+  assert.match(html, /retirar el producto en el evento/);
+});
+
+test("includes both entrance and product counts for mixed orders", () => {
+  const { subject, html } = buildTicketEmail({
+    buyerName: "Alfredo",
+    events: [{ title: "Festival", startsAt: null, ticketCount: 1, productCount: 1, totalClp: 15000 }],
+    ticketCount: 1,
+    productCount: 1,
+    orderTotalClp: 15000,
+    appPublicUrl: "https://tickeven.cl",
+  });
+  assert.equal(subject, "Tus entradas y productos están listos | TickEven");
+  assert.match(html, /1 entrada/);
+  assert.match(html, /1 producto/);
+  assert.match(html, /Preséntalo al retirar el producto en el evento/);
+});
+
 test("formats a valid Chilean event date and rejects invalid dates", () => {
   assert.match(formatEventDate("2026-12-06T21:00:00-03:00"), /diciembre de 2026/);
   assert.equal(formatEventDate("not-a-date"), "Fecha por confirmar");
